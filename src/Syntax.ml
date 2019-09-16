@@ -41,7 +41,29 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)
-    let eval _ = failwith "Not implemented yet"
+    let rec eval s e = match e with 
+      | Const x -> x
+      | Var v -> s v
+      | Binop (op, l, r) -> 
+        let lhs = eval s l
+        and rhs = eval s r
+        and b2i x = if x then 1 else 0
+        and i2b x = x != 0
+        in match op with
+          | "+" -> lhs + rhs
+          | "-" -> lhs - rhs
+          | "*" -> lhs * rhs
+          | "/" -> lhs / rhs
+          | "%" -> lhs mod rhs
+          | "<" -> b2i (lhs < rhs)
+          | "<=" -> b2i (lhs <= rhs)
+          | ">" -> b2i (lhs > rhs)
+          | ">=" -> b2i (lhs >= rhs)
+          | "==" -> b2i (lhs = rhs)
+          | "!=" -> b2i (lhs <> rhs)
+          | "&&" -> b2i ((i2b lhs) && (i2b rhs))
+          | "!!" -> b2i ((i2b lhs) || (i2b rhs))
+
 
   end
                     
@@ -65,8 +87,12 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ = failwith "Not implemented yet"
-                                                         
+    let rec eval (st, i, o) stmt = match stmt with 
+      | Read id -> let (v :: rest) = i in (Expr.update id v st, rest, o)
+      | Write e -> (st, i, o @ [(Expr.eval st e)])
+      | Assign (id, e) -> (Expr.update id (Expr.eval st e) st, i, o)
+      | Seq (stmt1, stmt2) -> eval (eval (st, i, o) stmt1) stmt2
+
   end
 
 (* The top-level definitions *)
