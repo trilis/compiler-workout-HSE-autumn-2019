@@ -1,5 +1,5 @@
-open GT
-open Syntax    
+open GT       
+open Language
        
 (* The type for the stack machine instructions *)
 @type insn =
@@ -19,7 +19,9 @@ type prg = insn list
 type config = int list * Stmt.config
 
 (* Stack machine interpreter
+
      val eval : config -> prg -> config
+
    Takes a configuration and a program, and returns a configuration as a result
  *)                         
 let evalCmd (stack, (state, i, o)) cmd = match cmd with
@@ -37,22 +39,24 @@ let rec eval conf prog = match prog with
   | (cmd :: rest) -> eval (evalCmd conf cmd) rest
 
 (* Top-level evaluation
-     val run : int list -> prg -> int list
-   Takes an input stream, a program, and returns an output stream this program calculates
+
+     val run : prg -> int list -> int list
+
+   Takes a program, an input stream, and returns an output stream this program calculates
 *)
-let run i p = let (_, (_, _, o)) = eval ([], (Expr.empty, i, [])) p in o
+let run p i = let (_, (_, _, o)) = eval ([], (Language.Expr.empty, i, [])) p in o
 
 (* Stack machine compiler
-     val compile : Syntax.Stmt.t -> prg
+
+     val compile : Language.Stmt.t -> prg
+
    Takes a program in the source language and returns an equivalent program for the
    stack machine
  *)
-
 let rec compileExpr e = match e with
   | Expr.Const x -> [CONST x]
   | Expr.Var v -> [LD v]
   | Expr.Binop (op, l, r) -> (compileExpr l) @ (compileExpr r) @ [BINOP op]
-
 
 let rec compile stmt = match stmt with
   | Stmt.Read x -> READ :: [ST x]
