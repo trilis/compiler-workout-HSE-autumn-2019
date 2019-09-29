@@ -122,11 +122,11 @@ module Stmt =
 
     (* Statement parser *)
     ostap (
-      parse: stmt | seq;
-      stmt: -"read" -"(" var:IDENT -")" {Read var} 
-        | -"write" -"(" expr:!(Expr.parse) -")" {Write expr}
-        | var:IDENT -":=" expr:!(Expr.parse) {Assign(var, expr)};
-      seq: first:stmt -";" rest:parse {Seq(first, rest)}
+      parse: seq | stmt;
+      stmt: "read" "(" var:IDENT ")" {Read var} 
+        | "write" "(" expr:!(Expr.parse) ")" {Write expr}
+        | var:IDENT ":=" expr:!(Expr.parse) {Assign(var, expr)};
+      seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
   end
