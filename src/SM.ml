@@ -24,7 +24,19 @@ type config = int list * Stmt.config
 
    Takes a configuration and a program, and returns a configuration as a result
 *)                         
-let rec eval conf prog = failwith "Not yet implemented"
+let evalCmd (stack, (state, i, o)) cmd = match cmd with
+  | BINOP op -> let (rhs :: lhs :: rest) = stack in
+                let newstack = (Expr.eval state (Expr.Binop (op, Expr.Const lhs, Expr.Const rhs))) :: rest in
+                (newstack, (state, i, o))
+  | CONST c -> (c :: stack, (state, i, o))
+  | READ -> let (x :: rest) = i in (x :: stack, (state, rest, o))
+  | WRITE -> let (x :: rest) = stack in (rest, (state, i, o @ [x]))
+  | LD v -> ((state v) :: stack, (state, i, o))
+  | ST v -> let (x :: rest) = stack in (rest, ((Expr.update v x state), i, o))
+
+let rec eval conf prog = match prog with
+  | [] -> conf
+  | (cmd :: rest) -> eval (evalCmd conf cmd) rest
 
 (* Top-level evaluation
 

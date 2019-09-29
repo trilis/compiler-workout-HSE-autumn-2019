@@ -44,7 +44,28 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
      *)                                                       
-    let eval _ _ = failwith "Not yet implemented"
+    let rec eval s e = match e with 
+      | Const x -> x
+      | Var v -> s v
+      | Binop (op, l, r) -> 
+        let lhs = eval s l
+        and rhs = eval s r
+        and b2i x = if x then 1 else 0
+        and i2b x = x != 0
+        in match op with
+          | "+" -> lhs + rhs
+          | "-" -> lhs - rhs
+          | "*" -> lhs * rhs
+          | "/" -> lhs / rhs
+          | "%" -> lhs mod rhs
+          | "<" -> b2i (lhs < rhs)
+          | "<=" -> b2i (lhs <= rhs)
+          | ">" -> b2i (lhs > rhs)
+          | ">=" -> b2i (lhs >= rhs)
+          | "==" -> b2i (lhs = rhs)
+          | "!=" -> b2i (lhs <> rhs)
+          | "&&" -> b2i ((i2b lhs) && (i2b rhs))
+          | "!!" -> b2i ((i2b lhs) || (i2b rhs))
 
     (* Expression parser. You can use the following terminals:
 
@@ -53,7 +74,19 @@ module Expr =
                                                                                                                   
     *)
     ostap (                                      
-      parse: empty {failwith "Not yet implemented"}
+      parse:
+        !(Util.expr
+           (fun x -> x)
+           [|
+             `Lefta , [ostapBinOp "!!"];
+             `Lefta , [ostapBinOp "&&"];
+             `Nona , [ostapBinOp "<"; ostapBinOp "<="; ostapBinOp ">"; ostapBinOp ">="; ostapBinOp "=="; ostapBinOp "!="];
+             `Lefta , [ostapBinOp "+"; ostapBinOp "-"];
+             `Lefta, [ostapBinOp "*"; ostapBinOp "/"; ostapBinOp "%"];
+           |]
+           primary
+         );
+      primary: x:IDENT {Var x} | x:DECIMAL {Const x} | -"(" parse -")"
     )
     
   end
@@ -78,11 +111,19 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ _ = failwith "Not yet implemented"
+    let rec eval (st, i, o) stmt = match stmt with 
+      | Read id -> let (v :: rest) = i in (Expr.update id v st, rest, o)
+      | Write e -> (st, i, o @ [(Expr.eval st e)])
+      | Assign (id, e) -> (Expr.update id (Expr.eval st e) st, i, o)
+      | Seq (stmt1, stmt2) -> eval (eval (st, i, o) stmt1) stmt2
 
     (* Statement parser *)
     ostap (
-      parse: empty {failwith "Not yet implemented"}
+      parse: stmt | seq;
+      stmt: -"read" -"(" var:IDENT -")" {Read var} 
+        | -"write" -"(" expr:!(Expr.parse) -")" {Write expr}
+        | var:IDENT -":=" expr:!(Expr.parse) {Assign(var, expr)};
+      seq: first:stmt -";" rest:parse {Seq(first, rest)}
     )
       
   end
