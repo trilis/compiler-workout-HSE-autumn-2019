@@ -4,6 +4,7 @@
 open GT
 
 (* Opening a library for combinator-based syntax analysis *)
+open Ostap
 open Ostap.Combinators
        
 (* Simple expressions: syntax and semantics *)
@@ -73,6 +74,8 @@ module Expr =
          DECIMAL --- a decimal constant [0-9]+ as a string
                                                                                                                   
     *)
+    let ostapBinOp op = ostap ($(op)), fun x y -> Binop(op, x, y)
+
     ostap (                                      
       parse:
         !(Util.expr

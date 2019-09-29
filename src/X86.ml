@@ -85,12 +85,12 @@ let compileCmd env cmd = match cmd with
   | LD var -> let s, nenv = env#allocate in nenv, [Mov (M env#loc var, eax); Mov(eax, s)]
   | ST var -> let s, nenv = (env#global var)#pop in nenv, [Mov(s, eax); Mov(eax, M env#loc var)]
   | READ -> let s, nenv = env#allocate in nenv, [Call "Lread"; Mov(eax, s)]
-  | WRITE -> let s, nenv = env#push in nenv, [Push s; Call "Lwrite"; Pop eax]
-  | BINOP op -> let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocare in match op with
-    | "+", "-", "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
+  | WRITE -> let s, nenv = env#pop in nenv, [Push s; Call "Lwrite"; Pop eax]
+  | BINOP op -> let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
+    | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
     | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
     | "%" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
-    | "<", ">", "<=", ">=", "==", "!=" -> let op' = match op with
+    | "<" | ">" | "<=" | ">=" | "==" | "!=" -> let op' = match op with
       | "<" -> "l"
       | ">" -> "g"
       | "<=" -> "le"
@@ -98,7 +98,7 @@ let compileCmd env cmd = match cmd with
       | "==" -> "e"
       | "!=" -> "ne"
         in nnenv, [Mov(y, eax); Binop("cmp", x, eax); Binop("^", ebx, ebx); Set(op', "%bl"); Mov(ebx, s)]
-    | "&&", "!!" -> nnenv, [Binop("cmp", L 0, x); Binop("^", eax, eax); Set("nz", "%al");
+    | "&&" | "!!" -> nnenv, [Binop("cmp", L 0, x); Binop("^", eax, eax); Set("nz", "%al");
                             Binop("cmp", L 0, y); Binop("^", ebx, ebx); Set("nz", "%bl");
                             Binop(op, eax, ebx); Mov(ebx, s)]
 
