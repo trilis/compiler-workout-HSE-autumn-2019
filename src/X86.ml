@@ -97,10 +97,10 @@ let compileCmd env cmd = match cmd with
       | ">=" -> "ge"
       | "==" -> "e"
       | "!=" -> "ne"
-        in nnenv, [Mov(y, eax); Binop("cmp", x, eax); Binop("^", ecx, ecx); Set(op', "%cl"); Mov(ecx, s)]
+        in nnenv, [Mov(y, eax); Binop("cmp", x, eax); Binop("^", edx, edx); Set(op', "%dl"); Mov(edx, s)]
     | "&&" | "!!" -> nnenv, [Binop("cmp", L 0, x); Binop("^", eax, eax); Set("nz", "%al");
-                            Binop("cmp", L 0, y); Binop("^", ecx, ecx); Set("nz", "%cl");
-                            Binop(op, eax, ecx); Mov(ecx, s)]
+                            Binop("cmp", L 0, y); Binop("^", edx, edx); Set("nz", "%dl");
+                            Binop(op, eax, edx); Mov(edx, s)]
 
 let rec compile env prg = match prg with
   | [] -> env, []
