@@ -117,8 +117,8 @@ module Stmt =
     (* Statement evaluator
 
          val eval : config -> t -> config
-       Takes a configuration and a statement, and returns another configuration
 
+       Takes a configuration and a statement, and returns another configuration
     *)
     let rec eval (st, i, o) stmt = match stmt with 
       | Read id -> let (v :: rest) = i in (Expr.update id v st, rest, o)
@@ -145,11 +145,11 @@ type t = Stmt.t
 (* Top-level evaluator
 
      eval : t -> int list -> int list
-   Takes a program and its input stream, and returns the output stream
 
+   Takes a program and its input stream, and returns the output stream
 *)
 let eval p i =
   let _, _, o = Stmt.eval (Expr.empty, i, []) p in o
 
 (* Top-level parser *)
-let parse = Stmt.parse
+let parse = Stmt.parse                                                     
