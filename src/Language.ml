@@ -39,7 +39,6 @@ module Expr =
     let update x v s = fun y -> if x = y then v else s y
 
     (* Expression evaluator
-
           val eval : state -> t -> int
  
        Takes a state and an expression, and returns the value of the expression in 
@@ -69,23 +68,28 @@ module Expr =
           | "!!" -> b2i ((i2b lhs) || (i2b rhs))
 
     (* Expression parser. You can use the following terminals:
-
          IDENT   --- a non-empty identifier a-zA-Z[a-zA-Z0-9_]* as a string
          DECIMAL --- a decimal constant [0-9]+ as a string
                                                                                                                   
     *)
-    let ostapBinOp op = ostap ($(op)), fun x y -> Binop(op, x, y)
-
     ostap (                                      
       parse:
         !(Util.expr
            (fun x -> x)
            [|
-             `Lefta , [ostapBinOp "!!"];
-             `Lefta , [ostapBinOp "&&"];
-             `Nona , [ostapBinOp "<"; ostapBinOp "<="; ostapBinOp ">"; ostapBinOp ">="; ostapBinOp "=="; ostapBinOp "!="];
-             `Lefta , [ostapBinOp "+"; ostapBinOp "-"];
-             `Lefta, [ostapBinOp "*"; ostapBinOp "/"; ostapBinOp "%"];
+            `Lefta , [ostap ("!!"), fun x y -> Binop ("!!", x, y)];
+            `Lefta , [ostap ("&&"), fun x y -> Binop ("&&", x, y)]; 
+            `Nona , [ostap ("=="), (fun x y -> Binop ("==", x, y));
+                     ostap ("!="), (fun x y -> Binop ("!=", x, y));
+                     ostap ("<="), (fun x y -> Binop ("<=", x, y));
+                     ostap ("<"), (fun x y -> Binop ("<", x, y));
+                     ostap (">="), (fun x y -> Binop (">=", x, y));
+                     ostap (">"), (fun x y -> Binop (">", x, y))]; 
+            `Lefta , [ostap ("+"), (fun x y -> Binop ("+", x, y));
+                      ostap ("-"), (fun x y -> Binop ("-", x, y))]; 
+            `Lefta , [ostap ("*"), (fun x y -> Binop ("*", x, y));
+                      ostap ("/"), (fun x y -> Binop ("/", x, y));
+                      ostap ("%"), (fun x y -> Binop ("%", x, y))]
            |]
            primary
          );
@@ -109,9 +113,7 @@ module Stmt =
     type config = Expr.state * int list * int list 
 
     (* Statement evaluator
-
          val eval : config -> t -> config
-
        Takes a configuration and a statement, and returns another configuration
     *)
     let rec eval (st, i, o) stmt = match stmt with 
@@ -137,9 +139,7 @@ module Stmt =
 type t = Stmt.t    
 
 (* Top-level evaluator
-
      eval : t -> int list -> int list
-
    Takes a program and its input stream, and returns the output stream
 *)
 let eval p i =
