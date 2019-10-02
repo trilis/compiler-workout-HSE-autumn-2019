@@ -92,6 +92,9 @@ let compileCmd env cmd = match cmd with
   | ST var -> let s, nenv = (env#global var)#pop in nenv, [Mov(s, eax); Mov(eax, M env#loc var)]
   | READ -> let s, nenv = env#allocate in nenv, [Call "Lread"; Mov(eax, s)]
   | WRITE -> let s, nenv = env#pop in nenv, [Push s; Call "Lwrite"; Pop eax]
+  | LABEL l -> env, [Label l]
+  | JMP l -> env, [Jmp l]
+  | CJMP (s, l) -> let x, nenv = env#pop in nenv, [Binop("cmp", L 0, x); CJmp(s, l)]
   | BINOP op -> let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
     | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
     | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]

@@ -72,6 +72,12 @@ let run p i =
    stack machine
 *)
 let rec compile =
+  let name_gen = object
+    val mutable cnt = 0
+    method get =
+      cnt <- (cnt + 1);
+      Printf.sprintf "label%d" cnt
+  end in
   let rec expr = function
   | Expr.Var   x          -> [LD x]
   | Expr.Const n          -> [CONST n]
@@ -82,3 +88,11 @@ let rec compile =
   | Stmt.Read x        -> [READ; ST x]
   | Stmt.Write e       -> expr e @ [WRITE]
   | Stmt.Assign (x, e) -> expr e @ [ST x]
+  | Stmt.Skip -> []
+  | Stmt.If (c, t, e) -> let else_label = name_gen#get in let end_label = name_gen#get in
+                           expr c @ [CJMP("z", else_label)] @ compile t @ [JMP end_label; LABEL else_label] @
+                           compile e @ [LABEL end_label]
+  | Stmt.While (c, b) -> let expr_label = name_gen#get in let body_label = name_gen#get in
+                           [JMP expr_label; LABEL body_label] @ compile b @ [LABEL expr_label] @ expr c @ [CJMP("nz", body_label)]
+  | Stmt.Repeat (b, c) -> let start_label = name_gen#get in
+                            [LABEL start_label] @ compile b @ expr c @ [CJMP("z", start_label)]
