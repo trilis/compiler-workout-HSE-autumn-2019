@@ -137,13 +137,19 @@ module Stmt =
                                 if Expr.i2b(Expr.eval st cond) then eval (st, i, o) stmt' else (st, i, o)
                                
     (* Statement parser *)
+    let orSkip x = match x with
+      | Some x -> x
+      | None -> Skip
+
     ostap (
       parse: seq | stmt;
       stmt: "read" "(" var:IDENT ")" {Read var} 
         | "write" "(" expr:!(Expr.parse) ")" {Write expr}
         | var:IDENT ":=" expr:!(Expr.parse) {Assign(var, expr)}
         | "skip" {Skip}
-        | "if" cond:!(Expr.parse) "then" t:parse "else" e:parse "fi" {If(cond, t, e)}
+        | "if" cond:!(Expr.parse) "then" t:parse
+            ei:(-"elif" !(Expr.parse) -"then" stmt)* e:(-"else" parse)? "fi"
+              {If(cond, t, List.fold_right (fun (cond, t') e' -> If (cond, t', e')) ei (orSkip e))}
         | "while" cond:!(Expr.parse) "do" body:parse "od" {While(cond, body)}
         | "repeat" body:parse "until" cond:!(Expr.parse) {Repeat(body, cond)}
         | "for" s1:parse "," e:!(Expr.parse) "," s2:parse "do" s3:parse "od" {Seq(s1, While(e, Seq(s3, s2)))};
