@@ -43,9 +43,11 @@ let rec eval env (stack, (state, i, o)) prog = match prog with
   | [] -> (stack, (state, i, o))
   | (cmd :: rest) -> match cmd with
     | JMP l -> eval env (stack, (state, i, o)) (env#labeled l)
-    | CJMP (s, l) -> (let (x :: rest) = stack in match s with
-                      | "nz" -> if x != 0 then eval env (stack, (state, i, o)) (env#labeled l) else (stack, (state, i, o))
-                      | "z" -> if x == 0 then eval env (stack, (state, i, o)) (env#labeled l) else (stack, (state, i, o)))
+    | CJMP (s, l) -> (let (x :: stack') = stack in match s with
+                      | "nz" -> if x != 0 then eval env (stack', (state, i, o)) (env#labeled l)
+                        else eval env (stack', (state, i, o)) rest
+                      | "z" -> if x == 0 then eval env (stack', (state, i, o)) (env#labeled l)
+                        else eval env (stack', (state, i, o)) rest)
     | _ -> eval env (evalCmd env (stack, (state, i, o)) cmd) rest
 
 (* Top-level evaluation
