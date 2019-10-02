@@ -133,8 +133,9 @@ module Stmt =
       | Seq (stmt1, stmt2) -> eval (eval (st, i, o) stmt1) stmt2
       | Skip -> (st, i, o)
       | If (cond, t, e) -> if Expr.i2b(Expr.eval st cond) then eval (st, i, o) t else eval (st, i, o) e
-      | While (cond, body) -> let stmt' = Seq(body, stmt) in
-                                if Expr.i2b(Expr.eval st cond) then eval (st, i, o) stmt' else (st, i, o)
+      | While (cond, body) -> if Expr.i2b(Expr.eval st cond) then eval (eval (st, i, o) body) stmt else (st, i, o)
+      | Repeat (body, cond) -> let res = eval (st, i, o) body in eval res (While(Binop("==", cond, Const 0), body))
+
                                
     (* Statement parser *)
     let orSkip x = match x with
