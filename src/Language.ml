@@ -4,6 +4,7 @@
 open GT
 
 (* Opening a library for combinator-based syntax analysis *)
+open Ostap
 open Ostap.Combinators
        
 (* Simple expressions: syntax and semantics *)
@@ -43,8 +44,30 @@ module Expr =
  
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
-    *)                                                       
-    let eval st expr = failwith "Not yet implemented"
+    *)
+    let b2i x = if x then 1 else 0
+    let i2b x = x != 0
+
+    let rec eval s e = match e with 
+      | Const x -> x
+      | Var v -> s v
+      | Binop (op, l, r) -> 
+        let lhs = eval s l
+        and rhs = eval s r
+        in match op with
+          | "+" -> lhs + rhs
+          | "-" -> lhs - rhs
+          | "*" -> lhs * rhs
+          | "/" -> lhs / rhs
+          | "%" -> lhs mod rhs
+          | "<" -> b2i (lhs < rhs)
+          | "<=" -> b2i (lhs <= rhs)
+          | ">" -> b2i (lhs > rhs)
+          | ">=" -> b2i (lhs >= rhs)
+          | "==" -> b2i (lhs = rhs)
+          | "!=" -> b2i (lhs <> rhs)
+          | "&&" -> b2i ((i2b lhs) && (i2b rhs))
+          | "!!" -> b2i ((i2b lhs) || (i2b rhs))
 
     (* Expression parser. You can use the following terminals:
 
@@ -53,7 +76,27 @@ module Expr =
                                                                                                                   
     *)
     ostap (                                      
-      parse: empty {failwith "Not yet implemented"}
+      parse:
+        !(Util.expr
+           (fun x -> x)
+           [|
+            `Lefta , [ostap ("!!"), fun x y -> Binop ("!!", x, y)];
+            `Lefta , [ostap ("&&"), fun x y -> Binop ("&&", x, y)]; 
+            `Nona , [ostap ("=="), (fun x y -> Binop ("==", x, y));
+                     ostap ("!="), (fun x y -> Binop ("!=", x, y));
+                     ostap ("<="), (fun x y -> Binop ("<=", x, y));
+                     ostap ("<"), (fun x y -> Binop ("<", x, y));
+                     ostap (">="), (fun x y -> Binop (">=", x, y));
+                     ostap (">"), (fun x y -> Binop (">", x, y))]; 
+            `Lefta , [ostap ("+"), (fun x y -> Binop ("+", x, y));
+                      ostap ("-"), (fun x y -> Binop ("-", x, y))]; 
+            `Lefta , [ostap ("*"), (fun x y -> Binop ("*", x, y));
+                      ostap ("/"), (fun x y -> Binop ("/", x, y));
+                      ostap ("%"), (fun x y -> Binop ("%", x, y))]
+           |]
+           primary
+         );
+      primary: x:IDENT {Var x} | x:DECIMAL {Const x} | -"(" parse -")"
     )
     
   end
@@ -82,11 +125,26 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let rec eval conf stmt = failwith "Not yet implemented"
+    let rec eval (st, i, o) stmt = match stmt with 
+      | Read id -> let (v :: rest) = i in (Expr.update id v st, rest, o)
+      | Write e -> (st, i, o @ [(Expr.eval st e)])
+      | Assign (id, e) -> (Expr.update id (Expr.eval st e) st, i, o)
+      | Seq (stmt1, stmt2) -> eval (eval (st, i, o) stmt1) stmt2
+      | Skip -> (st, i, o)
+      | If (cond, t, e) -> if Expr.i2b(Expr.eval st cond) then eval (st, i, o) t else eval (st, i, o) e
+      | While (cond, body) -> let stmt' = Seq(body, stmt) in
+                                if Expr.i2b(Expr.eval st cond) then eval (st, i, o) stmt' else (st, i, o)
                                
     (* Statement parser *)
     ostap (
-      parse: empty {failwith "Not yet implemented"}
+      parse: seq | stmt;
+      stmt: "read" "(" var:IDENT ")" {Read var} 
+        | "write" "(" expr:!(Expr.parse) ")" {Write expr}
+        | var:IDENT ":=" expr:!(Expr.parse) {Assign(var, expr)}
+        | "skip" {Skip}
+        | "if" "(" cond:!(Expr.parse) ")" "then" t:parse "else" e:parse "fi" {If(cond, t, e)}
+        | "while" "(" cond:!(Expr.parse) ")" "do" body:parse {While(cond, body)};
+      seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
   end
