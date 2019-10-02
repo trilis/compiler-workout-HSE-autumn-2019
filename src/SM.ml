@@ -28,7 +28,7 @@ type config = int list * Stmt.config
    Takes an environment, a configuration and a program, and returns a configuration as a result. The
    environment is used to locate a label to jump to (via method env#labeled <label_name>)
 *)                         
-let evalCmd (stack, (state, i, o)) cmd = match cmd with
+let evalCmd env (stack, (state, i, o)) cmd = match cmd with
   | BINOP op -> let (rhs :: lhs :: rest) = stack in
                 let newstack = (Expr.eval state (Expr.Binop (op, Expr.Const lhs, Expr.Const rhs))) :: rest in
                 (newstack, (state, i, o))
@@ -37,10 +37,16 @@ let evalCmd (stack, (state, i, o)) cmd = match cmd with
   | WRITE -> let (x :: rest) = stack in (rest, (state, i, o @ [x]))
   | LD v -> ((state v) :: stack, (state, i, o))
   | ST v -> let (x :: rest) = stack in (rest, ((Expr.update v x state), i, o))
+  | LABEL l -> (stack, (state, i, o))
 
-let rec eval env conf prog = match prog with
-  | [] -> conf
-  | (cmd :: rest) -> eval env (evalCmd conf cmd) rest
+let rec eval env (stack, (state, i, o)) prog = match prog with
+  | [] -> (stack, (state, i, o))
+  | (cmd :: rest) -> match cmd with
+    | JMP l -> eval env (stack, (state, i, o)) (env#labeled l)
+    | CJMP (s, l) -> (let (x :: rest) = stack in match s with
+                      | "nz" -> if x != 0 then eval env (stack, (state, i, o)) (env#labeled l) else (stack, (state, i, o))
+                      | "z" -> if x == 0 then eval env (stack, (state, i, o)) (env#labeled l) else (stack, (state, i, o)))
+    | _ -> eval env (evalCmd env (stack, (state, i, o)) cmd) rest
 
 (* Top-level evaluation
 

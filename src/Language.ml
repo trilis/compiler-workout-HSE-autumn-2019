@@ -114,7 +114,8 @@ module Stmt =
     (* empty statement                  *) | Skip
     (* conditional                      *) | If     of Expr.t * t * t
     (* loop with a pre-condition        *) | While  of Expr.t * t
-    (* loop with a post-condition       *) (* add yourself *)  with show
+    (* loop with a post-condition       *) | Repeat of t * Expr.t with show
+
                                                                     
     (* The type of configuration: a state, an input stream, an output stream *)
     type config = Expr.state * int list * int list 
@@ -142,8 +143,10 @@ module Stmt =
         | "write" "(" expr:!(Expr.parse) ")" {Write expr}
         | var:IDENT ":=" expr:!(Expr.parse) {Assign(var, expr)}
         | "skip" {Skip}
-        | "if" "(" cond:!(Expr.parse) ")" "then" t:parse "else" e:parse "fi" {If(cond, t, e)}
-        | "while" "(" cond:!(Expr.parse) ")" "do" body:parse {While(cond, body)};
+        | "if" cond:!(Expr.parse) "then" t:parse "else" e:parse "fi" {If(cond, t, e)}
+        | "while" cond:!(Expr.parse) "do" body:parse "od" {While(cond, body)}
+        | "repeat" body:parse "until" cond:!(Expr.parse) {Repeat(body, cond)}
+        | "for" s1:parse "," e:!(Expr.parse) "," s2:parse "do" s3:parse "od" {Seq(s1, While(e, Seq(s3, s2)))};
       seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
