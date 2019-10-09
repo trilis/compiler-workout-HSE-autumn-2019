@@ -73,7 +73,7 @@ let run p i =
    Takes a program in the source language and returns an equivalent program for the
    stack machine
 *)
-let rec compile =
+let rec compile stmt =
   let name_gen = object
     val mutable cnt = 0
     method get =
@@ -85,16 +85,18 @@ let rec compile =
   | Expr.Const n          -> [CONST n]
   | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
   in
-  function
-  | Stmt.Seq (s1, s2)  -> compile s1 @ compile s2
+  let rec compile_stmt stmt end_label = match stmt with
+  | Stmt.Seq (s1, s2)  -> (compile_stmt s1 "") @ (compile_stmt s2 end_label)
   | Stmt.Read x        -> [READ; ST x]
   | Stmt.Write e       -> expr e @ [WRITE]
   | Stmt.Assign (x, e) -> expr e @ [ST x]
   | Stmt.Skip -> []
-  | Stmt.If (c, t, e) -> let else_label = name_gen#get in let end_label = name_gen#get in
-                           expr c @ [CJMP("z", else_label)] @ compile t @ [JMP end_label; LABEL else_label] @
-                           compile e @ [LABEL end_label]
+  | Stmt.If (c, t, e) -> let else_label = name_gen#get in let cur_end_label = if end_label == "" then name_gen#get else "" in
+                           expr c @ [CJMP("z", else_label)] @ compile_stmt t cur_end_label @ [JMP end_label; LABEL else_label] @
+                           compile_stmt e cur_end_label @ (if end_label == "" then [LABEL cur_end_label] else [])
   | Stmt.While (c, b) -> let expr_label = name_gen#get in let body_label = name_gen#get in
-                           [JMP expr_label; LABEL body_label] @ compile b @ [LABEL expr_label] @ expr c @ [CJMP("nz", body_label)]
+                           [JMP expr_label; LABEL body_label] @ compile_stmt b "" @ [LABEL expr_label] @ 
+                           expr c @ [CJMP("nz", body_label)]
   | Stmt.Repeat (b, c) -> let start_label = name_gen#get in
-                            [LABEL start_label] @ compile b @ expr c @ [CJMP("z", start_label)]
+                            [LABEL start_label] @ compile_stmt b "" @ expr c @ [CJMP("z", start_label)]
+  in compile_stmt stmt ""
