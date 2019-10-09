@@ -86,7 +86,36 @@ open SM
    Take an environment, a stack machine program, and returns a pair --- the updated environment and the list
    of x86 instructions
 *)
-let compile _ = failwith "Not Implemented Yet"
+let compileCmd env cmd = match cmd with
+  | CONST x -> let s, nenv = env#allocate in nenv, [Mov (L x, s)]
+  | LD var -> let s, nenv = env#allocate in nenv, [Mov (M env#loc var, eax); Mov(eax, s)]
+  | ST var -> let s, nenv = (env#global var)#pop in nenv, [Mov(s, eax); Mov(eax, M env#loc var)]
+  | READ -> let s, nenv = env#allocate in nenv, [Call "Lread"; Mov(eax, s)]
+  | WRITE -> let s, nenv = env#pop in nenv, [Push s; Call "Lwrite"; Pop eax]
+  | LABEL l -> env, [Label l]
+  | JMP l -> env, [Jmp l]
+  | CJMP (s, l) -> let x, nenv = env#pop in nenv, [Binop("cmp", L 0, x); CJmp(s, l)]
+  | BINOP op -> let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
+    | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
+    | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
+    | "%" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
+    | "<" | ">" | "<=" | ">=" | "==" | "!=" -> let op' = match op with
+      | "<" -> "l"
+      | ">" -> "g"
+      | "<=" -> "le"
+      | ">=" -> "ge"
+      | "==" -> "e"
+      | "!=" -> "ne"
+        in nnenv, [Mov(y, eax);  Binop("^", edx, edx); Binop("cmp", x, eax); Set(op', "%dl"); Mov(edx, s)]
+    | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
+                             Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
+                             Binop(op, eax, edx); Mov(edx, s)]
+
+let rec compile env prg = match prg with
+  | [] -> env, []
+  | cmd :: rest -> let nenv, instr1 = compileCmd env cmd in 
+                    let nnenv, instr2 = compile nenv rest in
+                      nnenv, instr1 @ instr2
 
 (* A set of strings *)           
 module S = Set.Make (String)
