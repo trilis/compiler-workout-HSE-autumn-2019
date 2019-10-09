@@ -53,11 +53,11 @@ let rec eval env (prgstack, stack, (state, i, o)) prog = match prog with
                         else eval env (prgstack, stack', (state, i, o)) rest)
     | BEGIN (args, locals) -> let add_arg x ((v :: stack), s) = (stack, State.update x v s) in
                               let (stack', state') = List.fold_right add_arg args (stack, State.push_scope state (args @ locals)) in
-                              eval env (prgstack, stack', (state', i, o)) prog
+                              eval env (prgstack, stack', (state', i, o)) rest
     | END -> (match prgstack with 
               | [] -> (prgstack, stack, (state, i, o))
               | ((prog', state') :: prgstack') -> eval env (prgstack', stack, (State.drop_scope state state', i, o)) prog')
-    | CALL name -> eval env ((prog, state) :: prgstack, stack, (state, i, o)) (env#labeled name)
+    | CALL name -> eval env ((rest, state) :: prgstack, stack, (state, i, o)) (env#labeled name)
     | _ -> eval env (evalCmd (prgstack, stack, (state, i, o)) cmd) rest
 
 (* Top-level evaluation
