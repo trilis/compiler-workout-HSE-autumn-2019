@@ -178,6 +178,12 @@ module Stmt =
       | Some x -> x
       | None -> Skip
 
+
+    let orEmpty x = match x with
+      | Some x -> x
+      | None -> []
+
+
     ostap (                                      
       parse: seq | stmt;
       stmt: "read" "(" var:IDENT ")" {Read var} 
@@ -190,7 +196,7 @@ module Stmt =
         | "while" cond:!(Expr.parse) "do" body:parse "od" {While(cond, body)}
         | "repeat" body:parse "until" cond:!(Expr.parse) {Repeat(body, cond)}
         | "for" s1:parse "," e:!(Expr.parse) "," s2:parse "do" s3:parse "od" {Seq(s1, While(e, Seq(s3, s2)))}
-        | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))]) ")" {Call(name, args)};
+        | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))])? ")" {Call(name, orEmpty args)};
       seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
@@ -203,13 +209,9 @@ module Definition =
     (* The type for a definition: name, argument list, local variables, body *)
     type t = string * (string list * string list * Stmt.t)
 
-    let orEmpty x = match x with
-      | Some x -> x
-      | None -> []
-
     ostap (
-      parse: "fun" name:IDENT "(" args:!(Util.list)[ostap(IDENT)] ")" 
-         local_vars:(-"local" !(Util.list)[ostap(IDENT)])? "{" body:!(Stmt.parse) "}" {(name, (args, orEmpty local_vars, body))}
+      parse: "fun" name:IDENT "(" args:!(Util.list)[ostap(IDENT)]? ")" 
+         local_vars:(-"local" !(Util.list)[ostap(IDENT)])? "{" body:!(Stmt.parse) "}" {(name, (Stmt.orEmpty args, Stmt.orEmpty local_vars, body))}
     )
 
 
