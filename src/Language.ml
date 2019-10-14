@@ -172,7 +172,7 @@ module Stmt =
       | Write e -> let (st', i', o', Some r') = Expr.eval env conf e in eval env (st', i', o' @ [r'], None) Skip k
       | Assign (id, e) -> let (st', i', o', Some r') = Expr.eval env conf e in eval env (State.update id r' st', i', o', None) Skip k
       | Seq (stmt1, stmt2) -> eval env conf (diamond stmt2 k) stmt1
-      | Skip -> match k with | Skip -> conf | _ -> eval env conf Skip k
+      | Skip -> (match k with | Skip -> conf | _ -> eval env conf Skip k)
       | If (cond, t, e) -> let (st', i', o', Some r') = Expr.eval env conf cond in
                            if Expr.i2b r' then eval env (st', i', o', None) k t else eval env (st', i', o', None) k e
       | While (cond, body) -> let (st', i', o', Some r') = Expr.eval env conf cond in 
@@ -180,8 +180,8 @@ module Stmt =
                               else eval env (st', i', o', None) Skip k
       | Repeat (body, cond) -> eval env conf (diamond (While(Binop("==", cond, Const 0), body)) k) body
       | Call (name, args) -> eval env (Expr.eval env conf (Expr.Call (name, args))) Skip k
-      | Return x -> match x with | None -> (st, i, o, None) | Some e -> Expr.eval env conf e
-         
+      | Return x -> (match x with | None -> (st, i, o, None) | Some e -> Expr.eval env conf e)
+      
     (* Statement parser *)
     let orSkip x = match x with
       | Some x -> x
