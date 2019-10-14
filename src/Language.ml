@@ -204,6 +204,7 @@ module Stmt =
         | "while" cond:!(Expr.parse) "do" body:parse "od" {While(cond, body)}
         | "repeat" body:parse "until" cond:!(Expr.parse) {Repeat(body, cond)}
         | "for" s1:parse "," e:!(Expr.parse) "," s2:parse "do" s3:parse "od" {Seq(s1, While(e, Seq(s3, s2)))}
+        | "return" e:!(Expr.parse)? {Return e}
         | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))])? ")" {Call(name, orEmpty args)};
       seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
