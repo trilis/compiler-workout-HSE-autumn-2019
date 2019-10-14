@@ -114,6 +114,7 @@ let compileCmd env cmd = match cmd with
     | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
                              Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
                              Binop(op, eax, edx); Mov(edx, s)]
+  | END | BEGIN (_, _, _) | CALL (_, _, _) | RET _ -> []
 
 let rec compile env prg = match prg with
   | [] -> env, []
