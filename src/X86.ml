@@ -99,7 +99,7 @@ let compileCmd env cmd = match cmd with
   | LABEL l -> env, [Label l]
   | JMP l -> env, [Jmp l]
   | CJMP (s, l) -> let x, nenv = env#pop in nenv, [Binop("cmp", L 0, x); CJmp(s, l)]
-  | BINOP op -> let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
+  | BINOP op -> (let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
     | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
     | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
     | "%" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
@@ -113,8 +113,8 @@ let compileCmd env cmd = match cmd with
         in nnenv, [Mov(y, eax);  Binop("^", edx, edx); Binop("cmp", x, eax); Set(op', "%dl"); Mov(edx, s)]
     | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
                              Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
-                             Binop(op, eax, edx); Mov(edx, s)]
-  | END | BEGIN (_, _, _) | CALL (_, _, _) | RET _ -> []
+                             Binop(op, eax, edx); Mov(edx, s)])
+  | END | BEGIN (_, _, _) | CALL (_, _, _) | RET _ -> env, []
 
 let rec compile env prg = match prg with
   | [] -> env, []
