@@ -95,7 +95,7 @@ let rec compile (defs, stmt) =
   | Expr.Var   x          -> [LD x]
   | Expr.Const n          -> [CONST n]
   | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
-  | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, false)]
+  | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, true)]
   in
   let rec compile_stmt stmt end_label = match stmt with
   | Stmt.Seq (s1, s2)  -> (compile_stmt s1 "") @ (compile_stmt s2 end_label)
@@ -111,7 +111,7 @@ let rec compile (defs, stmt) =
                            expr c @ [CJMP("nz", body_label)]
   | Stmt.Repeat (b, c) -> let start_label = name_gen#get in
                             [LABEL start_label] @ compile_stmt b "" @ expr c @ [CJMP("z", start_label)]
-  | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, true)]
+  | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, false)]
   | Stmt.Return x -> match x with | None -> [RET false] | Some e -> expr e @ [RET true]
   in 
   let compile_def (name, (args, locals, body)) = [LABEL name; BEGIN (name, args, locals)] @ (compile_stmt body "") @ [END]
