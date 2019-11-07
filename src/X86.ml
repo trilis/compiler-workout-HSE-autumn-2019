@@ -114,7 +114,23 @@ let compileCmd env cmd = match cmd with
     | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
                              Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
                              Binop(op, eax, edx); Mov(edx, s)])
-  | END | BEGIN (_, _, _) | CALL (_, _, _) | RET _ -> env, []
+  | BEGIN (name, args, locals) -> let nenv = env#enter name args locals in
+                                  nenv, [Push ebp; Mov(esp, ebp); Binop("-", M ("$" ^ nenv#lsize), esp)]
+  | END -> env, [Label env#epilogue; Mov(ebp, esp); Pop ebp; Ret; 
+                 Meta (Printf.sprintf "\t.set\t%s,\t%d" env#lsize (env#allocated * word_size))]
+  | RET ret -> if ret then let s, nenv = env#allocate in nenv, [Mov(s, eax); Jmp(nenv#epilogue)]
+                      else env, [Jmp(env#epilogue)]
+  | CALL (name, argn, ret) -> let rec comp_push_args xenv argn = (match argn with  
+                                | 0 -> xenv, []
+                                | argn -> let s, xxenv = xenv#pop in
+                                        let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
+                              ) in
+                              let nenv, push_args = comp_push_args env argn in
+                              let nnnenv, move_res = if ret then let s, nnenv = nenv#allocate in nnenv, [Mov(eax, s)]
+                                                            else nenv, [] in
+                              nnnenv, (List.map (fun x -> Push x) env#live_registers) @ push_args @ [Call name]
+                                @ if argn > 0 then [Binop("+", L (argn * word_size), esp)] else []
+                                @ (List.rev (List.map (fun x -> Pop x) env#live_registers))@ move_res
 
 let rec compile env prg = match prg with
   | [] -> env, []
