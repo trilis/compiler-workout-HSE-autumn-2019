@@ -66,7 +66,8 @@ let rec eval env (prgstack, stack, (state, i, o)) prog = match prog with
     | END | RET _ -> (match prgstack with 
               | [] -> (prgstack, stack, (state, i, o))
               | ((prog', state') :: prgstack') -> eval env (prgstack', stack, (State.leave state state', i, o)) prog')
-    | CALL (name, _, _) -> eval env ((rest, state) :: prgstack, stack, (state, i, o)) (env#labeled name)
+    | CALL (name, argn, is_ret) -> if env#is_label name then eval env ((rest, state) :: prgstack, stack, (state, i, o)) (env#labeled name)
+                           else eval env (env#builtin (prgstack, stack, (state, i, o)) name argn (not is_ret)) rest
     | _ -> eval env (evalCmd (prgstack, stack, (state, i, o)) cmd) rest
 
 (* Top-level evaluation
