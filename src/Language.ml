@@ -203,6 +203,7 @@ module Expr =
       primary:
         f:IDENT "(" args:!(Util.list0)[parse] ")" {Call (f, args)} 
       | n:DECIMAL {Const n}
+      | c:CHAR {Const (Char.code c)}
       | s:STRING {String (String.sub s 1 (String.length s - 2))}
       | "[" elems:!(Util.list0)[parse] "]" {Array elems}
       | x:IDENT   {Var x}
