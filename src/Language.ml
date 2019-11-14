@@ -126,8 +126,40 @@ module Expr =
 
        which takes an environment (of the same type), a name of the function, a list of actual parameters and a configuration, 
        an returns a pair: the return value for the call and the resulting configuration
-    *)                                                       
-    let rec eval env ((st, i, o, r) as conf) expr = failwith "Not implemented"
+    *)
+    let b2i x = if x then 1 else 0
+    let i2b x = x != 0
+
+    let to_func op =
+      let bti   = function true -> 1 | _ -> 0 in
+      let itb b = b <> 0 in
+      let (|>) f g   = fun x y -> f (g x y) in
+      match op with
+      | "+"  -> (+)
+      | "-"  -> (-)
+      | "*"  -> ( * )
+      | "/"  -> (/)
+      | "%"  -> (mod)
+      | "<"  -> bti |> (< )
+      | "<=" -> bti |> (<=)
+      | ">"  -> bti |> (> )
+      | ">=" -> bti |> (>=)
+      | "==" -> bti |> (= )
+      | "!=" -> bti |> (<>)
+      | "&&" -> fun x y -> bti (itb x && itb y)
+      | "!!" -> fun x y -> bti (itb x || itb y)
+      | _    -> failwith (Printf.sprintf "Unknown binary operator %s" op)    
+
+
+    let rec eval env ((st, i, o, r) as conf) expr = (match expr with
+      | Const n -> (st, i, o, Some (Value.of_int n))
+      | Var x -> (st, i, o, Some (State.eval st x))
+      | Binop (op, x, y) -> let (_, _, _, Some x') as conf' = eval env conf x in
+                            let (st', i', o', Some y') as conf'' = eval env conf' y in 
+                            (st', i', o', Some (Value.of_int (to_func op (Value.to_int x') (Value.to_int y'))))
+      | Call (name, args) -> let ev_args, conf''' = List.fold_left 
+                             (fun (acc, conf') arg -> let (_, _, _, Some res) as conf'' = eval env conf' arg in (res :: acc, conf''))
+                             ([], conf) args in env#definition env name (List.rev ev_args) conf''')
     and eval_list env conf xs =
       let vs, (st, i, o, _) =
         List.fold_left
@@ -146,8 +178,29 @@ module Expr =
          DECIMAL --- a decimal constant [0-9]+ as a string                                                                                                                  
     *)
     ostap (                                      
-      parse: empty {failwith "Not implemented"}
+      parse:
+        !(Ostap.Util.expr 
+          (fun x -> x)
+          (Array.map (fun (a, s) -> a, 
+            List.map  (fun s -> ostap(- $(s)), (fun x y -> Binop (s, x, y))) s
+          ) 
+          [|                
+            `Lefta, ["!!"];
+            `Lefta, ["&&"];
+            `Nona , ["=="; "!="; "<="; "<"; ">="; ">"];
+            `Lefta, ["+" ; "-"];
+            `Lefta, ["*" ; "/"; "%"];
+          |] 
+        )
+        primary);
+      
+      primary:
+        f:IDENT "(" args:!(Util.list0)[parse] ")" {Call (f, args)} 
+      | n:DECIMAL {Const n}
+      | x:IDENT   {Var x}
+      | -"(" parse -")"
     )
+
     
   end
                     
@@ -173,6 +226,26 @@ module Stmt =
        Takes an environment, a configuration and a statement, and returns another configuration. The 
        environment is the same as for expressions
     *)
+    let diamond s1 s2 = match s2 with
+      | Skip -> s1
+      | _ -> Seq(s1, s2)
+
+
+    let rec eval env ((st, i, o, r) as conf) k stmt = match stmt with
+      | Assign (id, ind, e) -> let (st', i', o', ind') = Expr.eval_list env conf ind in 
+                               let (st', i', o', Some r') = Expr.eval env (st', i', o', None) e
+                               in eval env (State.update id r' st', i', o', None) Skip k
+      | Seq (stmt1, stmt2) -> eval env conf (diamond stmt2 k) stmt1
+      | Skip -> (match k with | Skip -> conf | _ -> eval env conf Skip k)
+      | If (cond, t, e) -> let (st', i', o', Some r') = Expr.eval env conf cond in
+                           if Expr.i2b (Value.to_int r') then eval env (st', i', o', None) k t else eval env (st', i', o', None) k e
+      | While (cond, body) -> let (st', i', o', Some r') = Expr.eval env conf cond in 
+                              if Expr.i2b (Value.to_int r') then eval env (st', i', o', None) (diamond stmt k) body
+                              else eval env (st', i', o', None) Skip k
+      | Repeat (body, cond) -> eval env conf (diamond (While(Binop("==", cond, Const 0), body)) k) body
+      | Call (name, args) -> eval env (Expr.eval env conf (Expr.Call (name, args))) Skip k
+      | Return x -> (match x with | None -> (st, i, o, None) | Some e -> Expr.eval env conf e)
+
 
     let update st x v is =
       let rec update a v = function
@@ -185,12 +258,30 @@ module Stmt =
           ) 
       in
       State.update x (match is with [] -> v | _ -> update (State.eval st x) v is) st
-          
-    let rec eval env ((st, i, o, r) as conf) k stmt = failwith "Not implemented"
-         
+                   
     (* Statement parser *)
-    ostap (
-      parse: empty {failwith "Not implemented"}
+    let orSkip x = match x with
+      | Some x -> x
+      | None -> Skip
+
+
+    let orEmpty x = match x with
+      | Some x -> x
+      | None -> []
+
+    ostap (                                      
+      parse: seq | stmt;
+      stmt: var:IDENT ind:(-"[" !(Expr.parse) -"]")* ":=" expr:!(Expr.parse) {Assign(var, ind, expr)}
+        | "skip" {Skip}
+        | "if" cond:!(Expr.parse) "then" t:parse
+            ei:(-"elif" !(Expr.parse) -"then" stmt)* e:(-"else" parse)? "fi"
+              {If(cond, t, List.fold_right (fun (cond, t') e' -> If (cond, t', e')) ei (orSkip e))}
+        | "while" cond:!(Expr.parse) "do" body:parse "od" {While(cond, body)}
+        | "repeat" body:parse "until" cond:!(Expr.parse) {Repeat(body, cond)}
+        | "for" s1:parse "," e:!(Expr.parse) "," s2:parse "do" s3:parse "od" {Seq(s1, While(e, Seq(s3, s2)))}
+        | "return" e:!(Expr.parse)? {Return e}
+        | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))])? ")" {Call(name, orEmpty args)};
+      seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
   end

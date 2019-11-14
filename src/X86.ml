@@ -90,18 +90,51 @@ open SM
    Take an environment, a stack machine program, and returns a pair --- the updated environment and the list
    of x86 instructions
 *)
-let compile env code =
-  let suffix = function
-  | "<"  -> "l"
-  | "<=" -> "le"
-  | "==" -> "e"
-  | "!=" -> "ne"
-  | ">=" -> "ge"
-  | ">"  -> "g"
-  | _    -> failwith "unknown operator"	
-  in
-  let rec compile' env scode = failwith "Not implemented" in
-  compile' env code
+let compileCmd env cmd = match cmd with
+  | CONST x -> let s, nenv = env#allocate in nenv, [Mov (L x, s)]
+  | LD var -> let s, nenv = env#allocate in nenv, [Mov (env#loc var, eax); Mov(eax, s)]
+  | ST var -> let s, nenv = (env#global var)#pop in nenv, [Mov(s, eax); Mov(eax, env#loc var)]
+  | LABEL l -> env, [Label l]
+  | JMP l -> env, [Jmp l]
+  | CJMP (s, l) -> let x, nenv = env#pop in nenv, [Binop("cmp", L 0, x); CJmp(s, l)]
+  | BINOP op -> (let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
+    | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
+    | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
+    | "%" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
+    | "<" | ">" | "<=" | ">=" | "==" | "!=" -> let op' = match op with
+      | "<" -> "l"
+      | ">" -> "g"
+      | "<=" -> "le"
+      | ">=" -> "ge"
+      | "==" -> "e"
+      | "!=" -> "ne"
+        in nnenv, [Mov(y, eax);  Binop("^", edx, edx); Binop("cmp", x, eax); Set(op', "%dl"); Mov(edx, s)]
+    | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
+                             Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
+                             Binop(op, eax, edx); Mov(edx, s)])
+  | BEGIN (name, args, locals) -> let nenv = env#enter name args locals in
+                                  nenv, [Push ebp; Mov(esp, ebp); Binop("-", M ("$" ^ nenv#lsize), esp)]
+  | END -> env, [Label env#epilogue; Mov(ebp, esp); Pop ebp; Ret; 
+                 Meta (Printf.sprintf "\t.set\t%s,\t%d" env#lsize (env#allocated * word_size))]
+  | RET ret -> if ret then let s, nenv = env#pop in nenv, [Mov(s, eax); Jmp(nenv#epilogue)]
+                      else env, [Jmp(env#epilogue)]
+  | CALL (name, argn, ret) -> let rec comp_push_args xenv argn = (match argn with  
+                                | 0 -> xenv, []
+                                | argn -> let s, xxenv = xenv#pop in
+                                        let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
+                              ) in
+                              let nenv, push_args = comp_push_args env argn in
+                              let nnnenv, move_res = if ret then let s, nnenv = nenv#allocate in nnenv, [Mov(eax, s)]
+                                                            else nenv, [] in
+                              nnnenv, (List.map (fun x -> Push x) env#live_registers) @ push_args @ [Call name]
+                                @ (if argn > 0 then [Binop("+", L (argn * word_size), esp)] else [])
+                                @ (List.rev (List.map (fun x -> Pop x) env#live_registers)) @ move_res
+
+let rec compile env prg = match prg with
+  | [] -> env, []
+  | cmd :: rest -> let nenv, instr1 = compileCmd env cmd in 
+                    let nnenv, instr2 = compile nenv rest in
+                      nnenv, instr1 @ instr2
 
 (* A set of strings *)           
 module S = Set.Make (String)
