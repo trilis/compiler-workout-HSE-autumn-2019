@@ -44,8 +44,11 @@ let evalCmd (prgstack, stack, (state, i, o)) cmd = match cmd with
                 let newstack = Value.of_int (Expr.to_func op (Value.to_int lhs) (Value.to_int rhs)) :: rest in
                 (prgstack, newstack, (state, i, o))
   | CONST c -> (prgstack, (Value.of_int c) :: stack, (state, i, o))
+  | STRING s -> (prgstack, (Value.of_string s) :: stack, (state, i, o))
   | LD v -> (prgstack, ((State.eval state v) :: stack), (state, i, o))
   | ST v -> let (x :: rest) = stack in (prgstack, rest, ((State.update v x state), i, o))
+  | STA (arr, len) -> let v::ids, newstack = split (len + 1) stack in
+                      (prgstack, newstack, (Stmt.update state arr v (List.rev ids), i, o))
   | LABEL l -> (prgstack, stack, (state, i, o))
 
 let rec eval env (prgstack, stack, (state, i, o)) prog = match prog with
@@ -116,12 +119,17 @@ let rec compile (defs, stmt) =
   let rec expr = function
   | Expr.Var   x          -> [LD x]
   | Expr.Const n          -> [CONST n]
+  | Expr.String s         -> [STRING s]
+  | Expr.Array elems      -> List.concat (List.map expr elems) @ [CALL ("$array", List.length elems, true)]
+  | Expr.Elem (arr, i)    -> expr arr @ expr i @ [CALL ("$elem", 2, true)]
+  | Expr.Length arr       -> expr arr @ [CALL ("$length", 1, true)]
   | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
   | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, true)]
   in
   let rec compile_stmt stmt end_label = match stmt with
   | Stmt.Seq (s1, s2)  -> (compile_stmt s1 "") @ (compile_stmt s2 end_label)
-  | Stmt.Assign (x, i, e) -> List.concat (List.map expr (i @ [e])) @ [ST x]
+  | Stmt.Assign (x, [], e) -> expr e @ [ST x]
+  | Stmt.Assign (x, i, e) -> List.concat (List.map expr (i @ [e])) @ [STA (x, List.length i)]
   | Stmt.Skip -> []
   | Stmt.If (c, t, e) -> let else_label = name_gen#get in let cur_end_label = if end_label = "" then name_gen#get else end_label in
                            expr c @ [CJMP("z", else_label)] @ compile_stmt t cur_end_label @ [JMP cur_end_label; LABEL else_label] @
