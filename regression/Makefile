@@ -8,8 +8,10 @@ check: $(TESTS)
 
 $(TESTS): %: %.expr
 	#@$(RC) $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
-	cat $@.input | $(RC) -i $< > $@.log && diff $@.log orig/$@.log
-	cat $@.input | $(RC) -s $< > $@.log && diff $@.log orig/$@.log
+	@cat $@.input | $(RC) -i $< > $@.log && diff $@.log orig/$@.log
+	@cat $@.input | $(RC) -s $< > $@.log && diff $@.log orig/$@.log
 
 clean:
-	rm -f test*.log *.s *~ $(TESTS)
+	$(RM) test*.log *.s *~ $(TESTS)
+	$(MAKE) clean -C expressions
+	$(MAKE) clean -C deep-expressions
