@@ -213,6 +213,7 @@ module Expr =
       | Const n -> (st, i, o, Some (Value.of_int n))
       | Array elems -> let (st', i', o', elems') = eval_list env conf elems in env#definition env "$array" elems' (st', i', o', None)
       | String s -> (st, i, o, Some (Value.of_string (Bytes.of_string s)))
+      | Sexp (s, args) -> let (st', i', o', args') = eval_list env conf args in (st', i', o', Some (Value.sexp s args'))
       | Var x -> (st, i, o, Some (State.eval st x))
       | Binop (op, x, y) -> let (_, _, _, Some x') as conf' = eval env conf x in
                             let (st', i', o', Some y') as conf'' = eval env conf' y in 
@@ -264,6 +265,8 @@ module Expr =
       | c:CHAR {Const (Char.code c)}
       | s:STRING {String (String.sub s 1 (String.length s - 2))}
       | "[" elems:!(Util.list0)[parse] "]" {Array elems}
+      | "`" c:IDENT "(" args:!(Util.list)[parse] ")" {Sexp (c, args)}
+      | "`" c:IDENT {Sexp (c, [])}
       | x:IDENT   {Var x}
       | -"(" parse -")"
     )
@@ -287,8 +290,29 @@ module Stmt =
 
         (* Pattern parser *)                                 
         ostap (
-          parse: empty {failwith "Not implemented"}
+          parse: 
+            "_" {Wildcard}    
+          | "`" c:IDENT "(" args:!(Util.list)[parse] ")" {Sexp (c, args)}
+          | "`" c:IDENT {Sexp (c, [])}
+          | x:IDENT {Ident x}
         )
+
+        let rec check v = function
+          | Wildcard -> true
+          | Ident x -> true
+          | Sexp (s, args) -> (match v with 
+            | Value.Sexp(s', args') -> s = s' && List.length args = List.length args' &&
+              List.fold_right (fun (x, x') acc -> acc && check x' x) (List.combine args args') true
+            | _ -> false
+          )
+
+        let rec branch v = function
+          | [] -> None
+          | (p, s)::rest -> if check v p then Some (p, s) else branch v rest
+
+        let rec bind st = function
+          | (Ident x, v) -> State.bind x v st
+          | (Sexp (_, args), Value.Sexp (_, args')) -> List.fold_left bind st (List.combine args args') 
         
         let vars p =
           transform(t) (fun f -> object inherit [string list, _] @t[foldl] f method c_Ident s _ name = name::s end) [] p         
@@ -342,8 +366,14 @@ module Stmt =
                               if Expr.i2b (Value.to_int r') then eval env (st', i', o', None) (diamond stmt k) body
                               else eval env (st', i', o', None) Skip k
       | Repeat (body, cond) -> eval env conf (diamond (While(Binop("==", cond, Const 0), body)) k) body
+      | Case (e, cases) -> let (st', i', o', Some r) = Expr.eval env conf e in (match Pattern.branch r cases with
+                              | None -> eval env (st', i', o', None) Skip k
+                              | Some (p, s) -> let st'' = (State.push st' (Pattern.bind State.undefined (p, r)) (Pattern.vars p), i', o', None) in
+                                  eval env st'' k s
+                          )
       | Call (name, args) -> eval env (Expr.eval env conf (Expr.Call (name, args))) Skip k
       | Return x -> (match x with | None -> (st, i, o, None) | Some e -> Expr.eval env conf e)
+      | Leave -> eval env (State.drop st, i, o, None) Skip k
 
     let orSkip x = match x with
       | Some x -> x
@@ -365,8 +395,10 @@ module Stmt =
         | %"while" cond:!(Expr.parse) %"do" body:parse %"od" {While(cond, body)}
         | %"repeat" body:parse %"until" cond:!(Expr.parse) {Repeat(body, cond)}
         | %"for" s1:parse "," e:!(Expr.parse) "," s2:parse %"do" s3:parse %"od" {Seq(s1, While(e, Seq(s3, s2)))}
+        | %"case" e:!(Expr.parse) "of" cases:!(Util.listBy (ostap ("|")) branch)%"esac" {Case (e, cases)}
         | %"return" e:!(Expr.parse)? {Return e}
         | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))])? ")" {Call(name, orEmpty args)};
+      branch: p:!(Pattern.parse) "->" s:parse {p, Seq(s, Leave)};
       seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
       
