@@ -211,15 +211,15 @@ module Expr =
 
     let rec eval env ((st, i, o, r) as conf) = function
       | Const n -> (st, i, o, Some (Value.of_int n))
-      | Array elems -> let (st', i', o', elems') = eval_list env conf elems in env#definition env "$array" elems' (st', i', o', None)
+      | Array elems -> let (st', i', o', elems') = eval_list env conf elems in env#definition env ".array" elems' (st', i', o', None)
       | String s -> (st, i, o, Some (Value.of_string (Bytes.of_string s)))
       | Sexp (s, args) -> let (st', i', o', args') = eval_list env conf args in (st', i', o', Some (Value.sexp s args'))
       | Var x -> (st, i, o, Some (State.eval st x))
       | Binop (op, x, y) -> let (_, _, _, Some x') as conf' = eval env conf x in
                             let (st', i', o', Some y') as conf'' = eval env conf' y in 
                             (st', i', o', Some (Value.of_int (to_func op (Value.to_int x') (Value.to_int y'))))
-      | Elem (arr, i) -> let (st', i', o', res) = eval_list env conf [arr; i] in env#definition env "$elem" res (st', i', o', None)
-      | Length arr -> let (st', i', o', Some arr') =  eval env conf arr in env#definition env "$length" [arr'] (st', i', o', None)
+      | Elem (arr, i) -> let (st', i', o', res) = eval_list env conf [arr; i] in env#definition env ".elem" res (st', i', o', None)
+      | Length arr -> let (st', i', o', Some arr') =  eval env conf arr in env#definition env ".length" [arr'] (st', i', o', None)
       | Call (name, args) -> let (st', i', o', ev_args) = eval_list env conf args in env#definition env name ev_args (st', i', o', None)
     and eval_list env conf xs =
       let vs, (st, i, o, _) =
