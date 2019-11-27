@@ -311,6 +311,7 @@ module Stmt =
           | (p, s)::rest -> if check v p then Some (p, s) else branch v rest
 
         let rec bind st = function
+          | (Wildcard, _) -> st
           | (Ident x, v) -> State.bind x v st
           | (Sexp (_, args), Value.Sexp (_, args')) -> List.fold_left bind st (List.combine args args') 
         
