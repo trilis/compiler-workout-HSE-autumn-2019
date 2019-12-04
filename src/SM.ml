@@ -55,11 +55,19 @@ let evalCmd (prgstack, stack, (state, i, o)) cmd = match cmd with
                 (prgstack, newstack, (state, i, o))
   | CONST c -> (prgstack, (Value.of_int c) :: stack, (state, i, o))
   | STRING s -> (prgstack, (Value.of_string (Bytes.of_string s)) :: stack, (state, i, o))
+  | SEXP (s, n) -> let (args, stack') = split n stack in (prgstack, Value.sexp s (List.rev args) :: stack', (state, i, o))
   | LD v -> (prgstack, ((State.eval state v) :: stack), (state, i, o))
   | ST v -> let (x :: rest) = stack in (prgstack, rest, ((State.update v x state), i, o))
   | STA (arr, len) -> let v::ids, newstack = split (len + 1) stack in
                       (prgstack, newstack, (Stmt.update state arr v (List.rev ids), i, o))
   | LABEL l -> (prgstack, stack, (state, i, o))
+  | DROP -> let (_ :: rest) = stack in (prgstack, rest, (state, i, o))
+  | DUP -> let (x :: rest) = stack in (prgstack, (x :: x :: rest), (state, i, o))
+  | SWAP -> let (x :: y :: rest) = stack in (prgstack, (y :: x :: rest), (state, i, o))
+  | TAG s -> let (x :: rest) = stack in let res = (match x with | Value.Sexp(s', _) when s' = s -> 1 | _ -> 0) in
+              (prgstack, (Value.of_int res) :: rest, (state, i, o))
+  | ENTER xs -> (prgstack, stack, (State.push state State.undefined xs, i, o))
+  | LEAVE -> (prgstack, stack, (State.drop state, i, o))
 
 let rec eval env (prgstack, stack, (state, i, o)) prog = match prog with
   | [] -> (prgstack, stack, (state, i, o))
@@ -121,6 +129,19 @@ let run p i =
    Takes a program in the source language and returns an equivalent program for the
    stack machine
 *)
+let rec check ids exit_label = function
+  | Stmt.Pattern.Wildcard -> []
+  | Stmt.Pattern.Ident x -> []
+  | Stmt.Pattern.Sexp (s, args) -> [DUP] @ List.flatten (List.map (fun x -> [CONST x; CALL (".elem", 2, true)]) ids) @ 
+                                   [DUP; TAG s; CJMP ("z", exit_label); DUP; CALL (".length", 1, true);
+                                    CONST (List.length args); BINOP ("-"); CJMP ("nz", exit_label); DROP] @
+                                   List.concat(List.mapi (fun i arg -> check (ids @ [i]) exit_label arg) args)
+
+let rec bind = function
+  | Stmt.Pattern.Wildcard -> [DROP]
+  | Stmt.Pattern.Ident x -> [ST x]
+  | Stmt.Pattern.Sexp (s, args) -> List.concat(List.mapi (fun i arg -> [DUP; CONST i; CALL (".elem", 2, true)] @ bind arg) args) @ [DROP]
+
 let rec compile (defs, stmt) =
   let name_gen = object
     val mutable cnt = 0
@@ -132,6 +153,7 @@ let rec compile (defs, stmt) =
   | Expr.Var   x          -> [LD x]
   | Expr.Const n          -> [CONST n]
   | Expr.String s         -> [STRING s]
+  | Expr.Sexp (s, args)   -> List.concat (List.map expr args) @ [SEXP (s, List.length args)]
   | Expr.Array elems      -> List.concat (List.map expr elems) @ [CALL ("$array", List.length elems, true)]
   | Expr.Elem (arr, i)    -> expr arr @ expr i @ [CALL ("$elem", 2, true)]
   | Expr.Length arr       -> expr arr @ [CALL ("$length", 1, true)]
@@ -151,8 +173,16 @@ let rec compile (defs, stmt) =
                            expr c @ [CJMP("nz", body_label)]
   | Stmt.Repeat (b, c) -> let start_label = name_gen#get in
                             [LABEL start_label] @ compile_stmt b "" @ expr c @ [CJMP("z", start_label)]
+  | Stmt.Case (v, branches) -> let cur_end_label = if end_label = "" then name_gen#get else end_label in
+                                let rec compile_branch (p, s) = let next_label = name_gen#get in
+                                  let s' = compile_stmt s end_label in
+                                  check [] next_label p @ [ENTER (Stmt.Pattern.vars p); DUP] @ bind p @ [DROP] @
+                                  s' @ [JMP cur_end_label] @ [LABEL next_label; DROP] in
+                                expr v @ List.flatten (List.map compile_branch branches) @
+                                (if end_label == "" then [LABEL cur_end_label] else [])
   | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, false)]
-  | Stmt.Return x -> match x with | None -> [RET false] | Some e -> expr e @ [RET true]
+  | Stmt.Return x -> (match x with | None -> [RET false] | Some e -> expr e @ [RET true])
+  | Stmt.Leave -> [LEAVE]
   in 
   let compile_def (name, (args, locals, body)) = [LABEL name; BEGIN (name, args, locals)] @ (compile_stmt body "") @ [END]
   in
