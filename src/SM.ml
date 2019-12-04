@@ -154,9 +154,9 @@ let rec compile (defs, stmt) =
   | Expr.Const n          -> [CONST n]
   | Expr.String s         -> [STRING s]
   | Expr.Sexp (s, args)   -> List.concat (List.map expr args) @ [SEXP (s, List.length args)]
-  | Expr.Array elems      -> List.concat (List.map expr elems) @ [CALL ("$array", List.length elems, true)]
-  | Expr.Elem (arr, i)    -> expr arr @ expr i @ [CALL ("$elem", 2, true)]
-  | Expr.Length arr       -> expr arr @ [CALL ("$length", 1, true)]
+  | Expr.Array elems      -> List.concat (List.map expr elems) @ [CALL (".array", List.length elems, true)]
+  | Expr.Elem (arr, i)    -> expr arr @ expr i @ [CALL (".elem", 2, true)]
+  | Expr.Length arr       -> expr arr @ [CALL (".length", 1, true)]
   | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
   | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, true)]
   in
