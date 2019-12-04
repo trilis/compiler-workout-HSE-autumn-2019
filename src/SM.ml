@@ -179,7 +179,7 @@ let rec compile (defs, stmt) =
                                   check [] next_label p @ [ENTER (Stmt.Pattern.vars p); DUP] @ bind p @ [DROP] @
                                   s' @ [JMP cur_end_label] @ [LABEL next_label; DROP] in
                                 expr v @ List.flatten (List.map compile_branch branches) @
-                                (if end_label == "" then [LABEL cur_end_label] else [])
+                                (if end_label = "" then [LABEL cur_end_label] else [])
   | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, false)]
   | Stmt.Return x -> (match x with | None -> [RET false] | Some e -> expr e @ [RET true])
   | Stmt.Leave -> [LEAVE]
