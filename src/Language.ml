@@ -35,7 +35,21 @@ module Value =
     | _ -> failwith "symbolic expression expected"
 
     let update_string s i x = Bytes.set s i x; s 
-    let update_array  a i x = a.(i) <- x; a
+    let update_array  a i x = a.(i) <- x; a                                          
+
+    let string_val v =
+      let buf      = Buffer.create 128 in
+      let append s = Buffer.add_string buf s in
+      let rec inner = function
+      | Int    n    -> append (string_of_int n)
+      | String s    -> append "\""; append @@ Bytes.to_string s; append "\""
+      | Array  a    -> let n = Array.length a in
+                       append "["; Array.iteri (fun i a -> (if i > 0 then append ", "); inner a) a; append "]"
+      | Sexp (t, a) -> let n = List.length a in
+                       append "`"; append t; (if n > 0 then (append " ("; List.iteri (fun i a -> (if i > 0 then append ", "); inner a) a; append ")"))
+      in
+      inner v;
+      Bytes.of_string @@ Buffer.contents buf
                       
   end
        
@@ -106,20 +120,12 @@ module Builtin =
   struct
       
     let eval (st, i, o, _) args = function
-    | "read"     -> (match i with z::i' -> (st, i', o, Some (Value.of_int z)) | _ -> failwith "Unexpected end of input")
-    | "write"    -> (st, i, o @ [Value.to_int @@ List.hd args], None)
-    | ".elem"    -> let [b; j] = args in
-                    (st, i, o, let i = Value.to_int j in
-                               Some (match b with
-                                     | Value.String   s  -> Value.of_int @@ Char.code (Bytes.get s i)
-                                     | Value.Array    a  -> a.(i)
-                                     | Value.Sexp (_, a) -> List.nth a i
-                               )
-                    )         
-    | ".length"     -> (st, i, o, Some (Value.of_int (match List.hd args with Value.Sexp (_, a) -> List.length a | Value.Array a -> Array.length a | Value.String s -> Bytes.length s)))
-    | ".array"      -> (st, i, o, Some (Value.of_array @@ Array.of_list args))
-    | "isArray"  -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.Array  _ -> 1 | _ -> 0))
-    | "isString" -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.String _ -> 1 | _ -> 0))                     
+    | "read"     -> failwith "Not implemented yet"
+    | "write"    -> failwith "Not implemented yet"
+    | ".elem"    -> failwith "Not implemented yet"
+    | ".length"     -> failwith "Not implemented yet"
+    | ".array"      -> failwith "Not implemented yet"
+    | ".stringval"  -> failwith "Not implemented yet"
        
   end
     
@@ -131,15 +137,16 @@ module Expr =
        notation, it came from GT. 
     *)
     @type t =
-    (* integer constant   *) | Const  of int
-    (* array              *) | Array  of t list
-    (* string             *) | String of string
-    (* S-expressions      *) | Sexp   of string * t list
-    (* variable           *) | Var    of string
-    (* binary operator    *) | Binop  of string * t * t
-    (* element extraction *) | Elem   of t * t
-    (* length             *) | Length of t 
-    (* function call      *) | Call   of string * t list with show
+    (* integer constant   *) | Const     of int
+    (* array              *) | Array     of t list
+    (* string             *) | String    of string
+    (* S-expressions      *) | Sexp      of string * t list
+    (* variable           *) | Var       of string
+    (* binary operator    *) | Binop     of string * t * t
+    (* element extraction *) | Elem      of t * t
+    (* length             *) | Length    of t
+    (* string conversion  *) | StringVal of t
+    (* function call      *) | Call      of string * t list with show
 
     (* Available binary operators:
         !!                   --- disjunction
@@ -185,18 +192,7 @@ module Expr =
       | "!!" -> fun x y -> bti (itb x || itb y)
       | _    -> failwith (Printf.sprintf "Unknown binary operator %s" op)    
     
-    let rec eval env ((st, i, o, r) as conf) expr = failwith "Not implemented"
-    and eval_list env conf xs =
-      let vs, (st, i, o, _) =
-        List.fold_left
-          (fun (acc, conf) x ->
-            let (_, _, _, Some v) as conf = eval env conf x in
-            v::acc, conf
-          )
-          ([], conf)
-          xs
-      in
-      (st, i, o, List.rev vs)
+      let eval _ = failwith "Not implemented yet"
          
     (* Expression parser. You can use the following terminals:
 
@@ -205,8 +201,7 @@ module Expr =
     *)
     ostap (                                      
       parse: empty {failwith "Not implemented"}
-    )
-    
+    )    
   end
                     
 (* Simple statements: syntax and sematics *)
@@ -225,12 +220,11 @@ module Stmt =
         with show, foldl
 
         (* Pattern parser *)                                 
-        ostap (
+        ostap (                                      
           parse: empty {failwith "Not implemented"}
         )
+        let vars p = transform(t) (fun f -> object inherit [string list, _] @t[foldl] f method c_Ident s _ name = name::s end) [] p 
         
-        let vars p =
-          transform(t) (fun f -> object inherit [string list, _] @t[foldl] f method c_Ident s _ name = name::s end) [] p         
       end
         
     (* The type for statements *)
@@ -261,17 +255,16 @@ module Stmt =
           (match a with
            | Value.String s when tl = [] -> Value.String (Value.update_string s i (Char.chr @@ Value.to_int v))
            | Value.Array a               -> Value.Array  (Value.update_array  a i (update a.(i) v tl))
-           ) 
+          ) 
       in
       State.update x (match is with [] -> v | _ -> update (State.eval st x) v is) st
 
-    let rec eval env ((st, i, o, r) as conf) k stmt = failwith "Not implemented"
-                                                        
+    let eval _ = failwith "Not implemented yet"
+           
     (* Statement parser *)
-    ostap (
+    ostap (                                      
       parse: empty {failwith "Not implemented"}
-    )
-      
+    )      
   end
 
 (* Function and procedure definitions *)
@@ -281,15 +274,9 @@ module Definition =
     (* The type for a definition: name, argument list, local variables, body *)
     type t = string * (string list * string list * Stmt.t)
 
-    ostap (
-      arg  : IDENT;
-      parse: %"fun" name:IDENT "(" args:!(Util.list0 arg) ")"
-         locs:(%"local" !(Util.list arg))?
-        "{" body:!(Stmt.parse) "}" {
-        (name, (args, (match locs with None -> [] | Some l -> l), body))
-      }
+    ostap (                                      
+      parse: empty {failwith "Not implemented"}
     )
-
   end
     
 (* The top-level definitions *)
@@ -311,7 +298,7 @@ let eval (defs, body) i =
       (object
          method definition env f args ((st, i, o, r) as conf) =
            try
-             let xs, locs, s      =  snd @@ M.find f m in
+             let xs, locs, s      = snd @@ M.find f m in
              let st'              = List.fold_left (fun st (x, a) -> State.update x a st) (State.enter st (xs @ locs)) (List.combine xs args) in
              let st'', i', o', r' = Stmt.eval env (st', i, o, r) Stmt.Skip s in
              (State.leave st'' st, i', o', r')

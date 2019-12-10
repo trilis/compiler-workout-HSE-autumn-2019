@@ -41,3 +41,4 @@ clean:
 
 %.cmx: %.ml
 	$(OCAMLOPT) -c $(OFLAGS) $(STATIC) $(PXFLAGS) $<
+
