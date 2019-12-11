@@ -184,6 +184,6 @@ let rec compile (defs, stmt) =
   | Stmt.Return x -> (match x with | None -> [RET false] | Some e -> expr e @ [RET true])
   | Stmt.Leave -> [LEAVE]
   in 
-  let compile_def (name, (args, locals, body)) = [LABEL name; BEGIN (name, args, locals)] @ (compile_stmt body "") @ [END]
+  let compile_def (name, (args, locals, body)) = [LABEL ("L" ^ name); BEGIN (name, args, locals)] @ (compile_stmt body "") @ [END]
   in
   (compile_stmt stmt "") @ [END] @ (List.concat (List.map compile_def defs))
