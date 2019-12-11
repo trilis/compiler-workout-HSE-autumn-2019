@@ -120,12 +120,21 @@ module Builtin =
   struct
       
     let eval (st, i, o, _) args = function
-    | "read"     -> failwith "Not implemented yet"
-    | "write"    -> failwith "Not implemented yet"
-    | ".elem"    -> failwith "Not implemented yet"
-    | ".length"     -> failwith "Not implemented yet"
-    | ".array"      -> failwith "Not implemented yet"
-    | ".stringval"  -> failwith "Not implemented yet"
+      | "read"     -> (match i with z::i' -> (st, i', o, Some (Value.of_int z)) | _ -> failwith "Unexpected end of input")
+      | "write"    -> (st, i, o @ [Value.to_int @@ List.hd args], None)
+      | ".elem"    -> let [b; j] = args in
+                      (st, i, o, let i = Value.to_int j in
+                                 Some (match b with
+                                       | Value.String   s  -> Value.of_int @@ Char.code (Bytes.get s i)
+                                       | Value.Array    a  -> a.(i)
+                                       | Value.Sexp (_, a) -> List.nth a i
+                                 )
+                      )         
+      | ".length"     -> (st, i, o, Some (Value.of_int (match List.hd args with Value.Sexp (_, a) -> List.length a | Value.Array a -> Array.length a | Value.String s -> Bytes.length s)))
+      | ".array"      -> (st, i, o, Some (Value.of_array @@ Array.of_list args))
+      | "isArray"  -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.Array  _ -> 1 | _ -> 0))
+      | "isString" -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.String _ -> 1 | _ -> 0))                     
+      | ".stringval"  -> failwith "Not implemented yet"
        
   end
     
@@ -192,8 +201,6 @@ module Expr =
       | "!!" -> fun x y -> bti (itb x || itb y)
       | _    -> failwith (Printf.sprintf "Unknown binary operator %s" op)    
     
-      let eval _ = failwith "Not implemented yet"
-
     let b2i x = if x then 1 else 0
     let i2b x = x != 0
 
