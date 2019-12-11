@@ -123,8 +123,8 @@ let compileCmd env cmd = let call env name argn ret =
       @ (List.rev (List.map (fun x -> Pop x) (env#live_registers argn))) @ move_res
 in match cmd with
   | CONST x -> let s, nenv = env#allocate in nenv, [Mov (L x, s)]
-  | STRING s -> let str, nenv = env#string s in let x, nnenv = env#allocate in let nnnenv, call = call nnenv ".string" 1 true in
-                 nnnenv, [Mov(M ("$" ^ str), x)] @ call
+  | STRING s -> let str, env = env#string s in let x, env = env#allocate in let env, call = call env ".string" 1 true in
+                 env, [Mov(M ("$" ^ str), x)] @ call
   | SEXP (s, n) -> let x, nenv = env#allocate in let nnenv, call = call nenv ".sexp" (n + 1) true in 
                     nnenv, [Mov(L env#hash s, x)] @ call
   | LD var -> let s, nenv = env#allocate in nenv, [Mov (env#loc var, eax); Mov(eax, s)]
