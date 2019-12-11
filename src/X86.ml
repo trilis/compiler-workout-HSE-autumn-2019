@@ -109,35 +109,35 @@ let compileCmd env cmd = let call env name argn ret =
       | argn -> let s, xxenv = xenv#pop in
               let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
     ) in
-    let nenv, push_args = comp_push_args env argn in
+    let env, push_args = comp_push_args env argn in
     let push_args = (match name with
         | "Barray" -> push_args @ [Push (L argn)]
         | "Bsexp" -> push_args @ [Push (L argn)]
         | "Bsta" -> let x::v::rest = push_args in rest @ [x; v; Push(L (argn - 2))]
         | _ -> push_args
     ) in
-    let nnnenv, move_res = if ret then let s, nnenv = nenv#allocate in nnenv, [Mov(eax, s)]
-                                  else nenv, [] in
-    nnnenv, (List.map (fun x -> Push x) (env#live_registers argn)) @ push_args @ [Call esc_name]
+    let env, move_res = if ret then let s, env = env#allocate in env, [Mov(eax, s)]
+                                  else env, [] in
+    env, (List.map (fun x -> Push x) (env#live_registers argn)) @ push_args @ [Call esc_name]
       @ (if argn > 0 then [Binop("+", L ((List.length push_args) * word_size), esp)] else [])
       @ (List.rev (List.map (fun x -> Pop x) (env#live_registers argn))) @ move_res
 in match cmd with
-  | CONST x -> let s, nenv = env#allocate in nenv, [Mov (L x, s)]
+  | CONST x -> let s, env = env#allocate in env, [Mov (L x, s)]
   | STRING s -> let str, env = env#string s in let x, env = env#allocate in let env, call = call env ".string" 1 true in
                  env, [Mov(M ("$" ^ str), x)] @ call
-  | SEXP (s, n) -> let x, nenv = env#allocate in let nnenv, call = call nenv ".sexp" (n + 1) true in 
-                    nnenv, [Mov(L env#hash s, x)] @ call
-  | LD var -> let s, nenv = env#allocate in nenv, [Mov (env#loc var, eax); Mov(eax, s)]
-  | ST var -> let s, nenv = (env#global var)#pop in nenv, [Mov(s, eax); Mov(eax, env#loc var)]
-  | STA (arr, len) -> let s, nenv = (env#global arr)#allocate in let nnenv, call = call nenv ".sta" (len + 2) false in
-                        nnenv, [Mov(env#loc arr, eax); Mov(eax, s)] @ call
+  | SEXP (s, n) -> let x, env = env#allocate in let env, call = call env ".sexp" (n + 1) true in 
+                    env, [Mov(L env#hash s, x)] @ call
+  | LD var -> let s, env = env#allocate in env, [Mov (env#loc var, eax); Mov(eax, s)]
+  | ST var -> let s, env = (env#global var)#pop in env, [Mov(s, eax); Mov(eax, env#loc var)]
+  | STA (arr, len) -> let s, env = (env#global arr)#allocate in let env, call = call env ".sta" (len + 2) false in
+                        env, [Mov(env#loc arr, eax); Mov(eax, s)] @ call
   | LABEL l -> env, [Label l]
   | JMP l -> env, [Jmp l]
-  | CJMP (s, l) -> let x, nenv = env#pop in nenv, [Binop("cmp", L 0, x); CJmp(s, l)]
-  | BINOP op -> (let x, y, nenv = env#pop2 in let s, nnenv = nenv#allocate in match op with
-    | "+" | "-" | "*" -> nnenv, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
-    | "/" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
-    | "%" -> nnenv, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
+  | CJMP (s, l) -> let x, env = env#pop in env, [Binop("cmp", L 0, x); CJmp(s, l)]
+  | BINOP op -> (let x, y, env = env#pop2 in let s, env = env#allocate in match op with
+    | "+" | "-" | "*" -> env, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
+    | "/" -> env, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
+    | "%" -> env, [Mov(y, eax); Cltd; IDiv x; Mov(edx, s)]
     | "<" | ">" | "<=" | ">=" | "==" | "!=" -> let op' = match op with
       | "<" -> "l"
       | ">" -> "g"
@@ -145,21 +145,21 @@ in match cmd with
       | ">=" -> "ge"
       | "==" -> "e"
       | "!=" -> "ne"
-        in nnenv, [Mov(y, eax);  Binop("^", edx, edx); Binop("cmp", x, eax); Set(op', "%dl"); Mov(edx, s)]
-    | "&&" | "!!" -> nnenv, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
+        in env, [Mov(y, eax);  Binop("^", edx, edx); Binop("cmp", x, eax); Set(op', "%dl"); Mov(edx, s)]
+    | "&&" | "!!" -> env, [Binop("^", eax, eax); Binop("cmp", L 0, x); Set("nz", "%al");
                              Binop("^", edx, edx); Binop("cmp", L 0, y); Set("nz", "%dl");
                              Binop(op, eax, edx); Mov(edx, s)])
-  | BEGIN (name, args, locals) -> let nenv = env#enter name args locals in
-                                  nenv, [Push ebp; Mov(esp, ebp); Binop("-", M ("$" ^ nenv#lsize), esp)]
+  | BEGIN (name, args, locals) -> let env = env#enter name args locals in
+                                  env, [Push ebp; Mov(esp, ebp); Binop("-", M ("$" ^ env#lsize), esp)]
   | END -> env, [Label env#epilogue; Mov(ebp, esp); Pop ebp; Ret; 
                  Meta (Printf.sprintf "\t.set\t%s,\t%d" env#lsize (env#allocated * word_size))]
-  | RET ret -> if ret then let s, nenv = env#pop in nenv, [Mov(s, eax); Jmp(nenv#epilogue)]
+  | RET ret -> if ret then let s, env = env#pop in env, [Mov(s, eax); Jmp(env#epilogue)]
                       else env, [Jmp(env#epilogue)]
   | CALL (name, argn, ret) -> call env name argn ret
-  | DROP -> let _, nenv = env#pop in nenv, []
-  | DUP -> let x = env#peek in let s, nenv = env#allocate in nenv, [Mov(x, eax); Mov(eax, s)]
+  | DROP -> let _, env = env#pop in env, []
+  | DUP -> let x = env#peek in let s, env = env#allocate in env, [Mov(x, eax); Mov(eax, s)]
   | SWAP -> let x, y = env#peek2 in env, [Push x; Push y; Pop x; Pop y]
-  | TAG s -> let x, nenv = env#allocate in let nnenv, call = call nenv ".tag" 2 true in nnenv, [Mov (L env#hash s, x)] @ call
+  | TAG s -> let x, env = env#allocate in let env, call = call env ".tag" 2 true in env, [Mov (L env#hash s, x)] @ call
   | ENTER xs -> let code, env = List.fold_left (fun (code, env) x -> let s, env = env#pop in 
                   [Mov (s, eax); Mov (eax, env#loc x)]::code, env) ([], env#scope (List.rev xs)) (List.rev xs) in 
                   env, List.concat (List.rev code)
@@ -167,9 +167,9 @@ in match cmd with
 
 let rec compile env prg = match prg with
   | [] -> env, []
-  | cmd :: rest -> let nenv, instr1 = compileCmd env cmd in 
-                    let nnenv, instr2 = compile nenv rest in
-                      nnenv, instr1 @ instr2
+  | cmd :: rest -> let env, instr1 = compileCmd env cmd in 
+                    let env, instr2 = compile env rest in
+                      env, instr1 @ instr2
 
 (* A set of strings *)           
 module S = Set.Make (String) 
