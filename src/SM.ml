@@ -158,7 +158,7 @@ let rec compile (defs, stmt) =
   | Expr.Elem (arr, i)    -> expr arr @ expr i @ [CALL (".elem", 2, true)]
   | Expr.Length arr       -> expr arr @ [CALL (".length", 1, true)]
   | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
-  | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, true)]
+  | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL ("L" ^ name, List.length args, true)]
   in
   let rec compile_stmt stmt end_label = match stmt with
   | Stmt.Seq (s1, s2)  -> (compile_stmt s1 "") @ (compile_stmt s2 end_label)
@@ -180,7 +180,7 @@ let rec compile (defs, stmt) =
                                   s' @ [JMP cur_end_label] @ [LABEL next_label; DROP] in
                                 expr v @ List.flatten (List.map compile_branch branches) @
                                 (if end_label = "" then [LABEL cur_end_label] else [])
-  | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL (name, List.length args, false)]
+  | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL ("L" ^ name, List.length args, false)]
   | Stmt.Return x -> (match x with | None -> [RET false] | Some e -> expr e @ [RET true])
   | Stmt.Leave -> [LEAVE]
   in 

@@ -103,15 +103,22 @@ open SM
    of x86 instructions
 *)
 let compileCmd env cmd = let call env name argn ret = 
+  let esc_name = match name.[0] with '.' -> "B" ^ (String.sub name 1 (String.length name - 1)) | _ -> name in
   let rec comp_push_args xenv argn = (match argn with  
       | 0 -> xenv, []
       | argn -> let s, xxenv = xenv#pop in
               let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
     ) in
     let nenv, push_args = comp_push_args env argn in
+    let push_args = (match name with
+        | "Barray" -> push_args @ [Push (L argn)]
+        | "Bsexp" -> push_args @ [Push (L argn)]
+        | "Bsta" -> let x::v::rest = push_args in rest @ [x; v; Push(L (argn - 2))]
+        | _ -> push_args
+    ) in
     let nnnenv, move_res = if ret then let s, nnenv = nenv#allocate in nnenv, [Mov(eax, s)]
                                   else nenv, [] in
-    nnnenv, (List.map (fun x -> Push x) (env#live_registers argn)) @ push_args @ [Call name]
+    nnnenv, (List.map (fun x -> Push x) (env#live_registers argn)) @ push_args @ [Call esc_name]
       @ (if argn > 0 then [Binop("+", L ((List.length push_args) * word_size), esp)] else [])
       @ (List.rev (List.map (fun x -> Pop x) (env#live_registers argn))) @ move_res
 in match cmd with
