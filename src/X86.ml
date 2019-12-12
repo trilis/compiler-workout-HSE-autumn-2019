@@ -110,7 +110,7 @@ let compileCmd env cmd = let call env name argn ret =
               let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
     ) in
     let env, push_args = comp_push_args env argn in
-    let push_args = (match name with
+    let push_args = (match esc_name with
         | "Barray" -> push_args @ [Push (L argn)]
         | "Bsexp" -> push_args @ [Push (L argn)]
         | "Bsta" -> let x::v::rest = push_args in rest @ [x; v; Push(L (argn - 2))]
