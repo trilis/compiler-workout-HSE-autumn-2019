@@ -133,7 +133,7 @@ in match cmd with
                         env, [Mov(env#loc arr, eax); Mov(eax, s)] @ call
   | LABEL l -> (if env#is_barrier then (env#drop_barrier)#retrieve_stack l else env), [Label l]
   | JMP l -> (env#set_stack l)#set_barrier, [Jmp l]
-  | CJMP (s, l) -> let x, env = env#pop in env, [Binop("cmp", L 0, x); CJmp(s, l)]
+  | CJMP (s, l) -> let x, env = env#pop in env#set_stack l, [Binop("cmp", L 0, x); CJmp(s, l)]
   | BINOP op -> (let x, y, env = env#pop2 in let s, env = env#allocate in match op with
     | "+" | "-" | "*" -> env, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
     | "/" -> env, [Mov(y, eax); Cltd; IDiv x; Mov(eax, s)]
