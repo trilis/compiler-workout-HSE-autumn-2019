@@ -131,8 +131,8 @@ in match cmd with
   | ST var -> let s, env = (env#global var)#pop in env, [Mov(s, eax); Mov(eax, env#loc var)]
   | STA (arr, len) -> let s, env = (env#global arr)#allocate in let env, call = call env ".sta" (len + 2) false in
                         env, [Mov(env#loc arr, eax); Mov(eax, s)] @ call
-  | LABEL l -> env, [Label l]
-  | JMP l -> env, [Jmp l]
+  | LABEL l -> (if env#is_barrier then (env#drop_barrier)#retrieve_stack l else env), [Label l]
+  | JMP l -> (env#set_stack l)#set_barrier, [Jmp l]
   | CJMP (s, l) -> let x, env = env#pop in env, [Binop("cmp", L 0, x); CJmp(s, l)]
   | BINOP op -> (let x, y, env = env#pop2 in let s, env = env#allocate in match op with
     | "+" | "-" | "*" -> env, [Mov(y, eax); Binop (op, x, eax); Mov(eax, s)]
