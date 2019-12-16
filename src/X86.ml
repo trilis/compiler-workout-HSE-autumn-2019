@@ -104,7 +104,7 @@ open SM
 *)
 let compileCmd env cmd = let call env name argn ret = 
   let esc_name = match name.[0] with '.' -> "B" ^ (String.sub name 1 (String.length name - 1)) | _ -> name in
-  let rec comp_push_args xenv argn = (match argn with  
+    let rec comp_push_args xenv argn = (match argn with  
       | 0 -> xenv, []
       | argn -> let s, xxenv = xenv#pop in
               let xxxenv, res = comp_push_args xxenv (argn - 1) in xxxenv, (Push s)::res
@@ -161,8 +161,8 @@ in match cmd with
   | SWAP -> let x, y = env#peek2 in env, [Push x; Push y; Pop x; Pop y]
   | TAG s -> let x, env = env#allocate in let env, call = call env ".tag" 2 true in env, [Mov (L env#hash s, x)] @ call
   | ENTER xs -> let code, env = List.fold_left (fun (code, env) x -> let s, env = env#pop in 
-                  [Mov (s, eax); Mov (eax, env#loc x)]::code, env) ([], env#scope (List.rev xs)) (List.rev xs) in 
-                  env, List.concat (List.rev code)
+                  [Mov (s, eax); Mov (eax, env#loc x)]::code, env) ([], env#scope xs) xs in 
+                  env, List.concat code
   | LEAVE -> env#unscope, []
 
 let rec compile env prg = match prg with
