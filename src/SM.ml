@@ -137,10 +137,10 @@ let rec check ids exit_label = function
                                     CONST (List.length args); BINOP ("-"); CJMP ("nz", exit_label); DROP] @
                                    List.concat(List.mapi (fun i arg -> check (ids @ [i]) exit_label arg) args)
 
-let rec bind = function
-  | Stmt.Pattern.Wildcard -> [DROP]
-  | Stmt.Pattern.Ident x -> [ST x]
-  | Stmt.Pattern.Sexp (s, args) -> List.concat(List.mapi (fun i arg -> [DUP; CONST i; CALL (".elem", 2, true)] @ bind arg) args) @ [DROP]
+let rec bind ids = function
+  | Stmt.Pattern.Wildcard -> []
+  | Stmt.Pattern.Ident _ -> [DUP] @ List.flatten (List.map (fun id -> [CONST id; CALL (".elem", 2, true)]) ids) @ [SWAP]
+  | Stmt.Pattern.Sexp (s, args) -> List.concat(List.mapi (fun i arg -> bind (ids @ [i]) arg) args) @ [DROP]
 
 let rec compile (defs, stmt) =
   let name_gen = object
@@ -176,8 +176,8 @@ let rec compile (defs, stmt) =
   | Stmt.Case (v, branches) -> let cur_end_label = if end_label = "" then name_gen#get else end_label in
                                 let rec compile_branch (p, s) = let next_label = name_gen#get in
                                   let s' = compile_stmt s end_label in
-                                  check [] next_label p @ [ENTER (Stmt.Pattern.vars p); DUP] @ bind p @ [DROP] @
-                                  s' @ [JMP cur_end_label] @ [LABEL next_label; DROP] in
+                                  check [] next_label p @ bind [] p @ [DROP; ENTER (List.rev (Stmt.Pattern.vars p))] @
+                                  s' @ [LEAVE; JMP cur_end_label] @ (match p with Sexp _ -> [LABEL next_label; DROP] | _ -> []) in
                                 expr v @ List.flatten (List.map compile_branch branches) @
                                 (if end_label = "" then [LABEL cur_end_label] else [])
   | Stmt.Call (name, args) -> List.concat (List.map expr args) @ [CALL ("L" ^ name, List.length args, false)]
