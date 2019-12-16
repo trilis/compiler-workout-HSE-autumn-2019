@@ -103,6 +103,7 @@ open SM
    of x86 instructions
 *)
 let compileCmd env cmd = let call env name argn ret = 
+  let live_registers = env#live_registers argn in 
   let esc_name = match name.[0] with '.' -> "B" ^ (String.sub name 1 (String.length name - 1)) | _ -> name in
     let rec comp_push_args xenv argn = (match argn with  
       | 0 -> xenv, []
@@ -118,9 +119,9 @@ let compileCmd env cmd = let call env name argn ret =
     ) in
     let env, move_res = if ret then let s, env = env#allocate in env, [Mov(eax, s)]
                                   else env, [] in
-    env, (List.map (fun x -> Push x) (env#live_registers argn)) @ push_args @ [Call esc_name]
+    env, (List.map (fun x -> Push x) live_registers) @ push_args @ [Call esc_name]
       @ (if argn > 0 then [Binop("+", L ((List.length push_args) * word_size), esp)] else [])
-      @ (List.rev (List.map (fun x -> Pop x) (env#live_registers argn))) @ move_res
+      @ (List.rev (List.map (fun x -> Pop x) live_registers)) @ move_res
 in match cmd with
   | CONST x -> let s, env = env#allocate in env, [Mov (L x, s)]
   | STRING s -> let str, env = env#string s in let x, env = env#allocate in let env, call = call env ".string" 1 true in
@@ -161,7 +162,7 @@ in match cmd with
   | SWAP -> let x, y = env#peek2 in env, [Push x; Push y; Pop x; Pop y]
   | TAG s -> let x, env = env#allocate in let env, call = call env ".tag" 2 true in env, [Mov (L env#hash s, x)] @ call
   | ENTER xs -> let code, env = List.fold_left (fun (code, env) x -> let s, env = env#pop in 
-                  [Mov (s, eax); Mov (eax, env#loc x)]::code, env) ([], env#scope xs) xs in 
+                  [Mov (s, eax); Mov (eax, env#loc x)]::code, env) ([], env#scope (List.rev xs)) (List.rev xs) in 
                   env, List.concat code
   | LEAVE -> env#unscope, []
 

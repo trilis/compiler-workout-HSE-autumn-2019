@@ -66,7 +66,9 @@ let evalCmd (prgstack, stack, (state, i, o)) cmd = match cmd with
   | SWAP -> let (x :: y :: rest) = stack in (prgstack, (y :: x :: rest), (state, i, o))
   | TAG s -> let (x :: rest) = stack in let res = (match x with | Value.Sexp(s', _) when s' = s -> 1 | _ -> 0) in
               (prgstack, (Value.of_int res) :: rest, (state, i, o))
-  | ENTER xs -> (prgstack, stack, (State.push state State.undefined xs, i, o))
+  | ENTER xs -> let state = State.push state State.undefined xs in let (vs, stack) = split (List.length xs) stack in
+                  let state = List.fold_left (fun res (s, v) -> State.update s v res) state (List.combine (List.rev xs) vs) in
+                  (prgstack, stack, (state, i, o))
   | LEAVE -> (prgstack, stack, (State.drop state, i, o))
 
 let rec eval env (prgstack, stack, (state, i, o)) prog = match prog with
@@ -140,7 +142,7 @@ let rec check ids exit_label = function
 let rec bind ids = function
   | Stmt.Pattern.Wildcard -> []
   | Stmt.Pattern.Ident _ -> [DUP] @ List.flatten (List.map (fun id -> [CONST id; CALL (".elem", 2, true)]) ids) @ [SWAP]
-  | Stmt.Pattern.Sexp (s, args) -> List.concat(List.mapi (fun i arg -> bind (ids @ [i]) arg) args) @ [DROP]
+  | Stmt.Pattern.Sexp (s, args) -> List.concat(List.mapi (fun i arg -> bind (ids @ [i]) arg) args)
 
 let rec compile (defs, stmt) =
   let name_gen = object
@@ -175,7 +177,7 @@ let rec compile (defs, stmt) =
                             [LABEL start_label] @ compile_stmt b "" @ expr c @ [CJMP("z", start_label)]
   | Stmt.Case (v, branches) -> let cur_end_label = if end_label = "" then name_gen#get else end_label in
                                 let rec compile_branch (p, s) = let next_label = name_gen#get in
-                                  let s' = compile_stmt s end_label in
+                                  let s' = compile_stmt s cur_end_label in
                                   check [] next_label p @ bind [] p @ [DROP; ENTER (List.rev (Stmt.Pattern.vars p))] @
                                   s' @ [LEAVE; JMP cur_end_label] @ (match p with Sexp _ -> [LABEL next_label; DROP] | _ -> []) in
                                 expr v @ List.flatten (List.map compile_branch branches) @

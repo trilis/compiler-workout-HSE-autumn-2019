@@ -395,7 +395,7 @@ module Stmt =
         | %"case" e:!(Expr.parse) "of" cases:!(Util.listBy (ostap ("|")) branch)%"esac" {Case (e, cases)}
         | %"return" e:!(Expr.parse)? {Return e}
         | name:IDENT "(" args:(!(Util.list)[ostap(!(Expr.parse))])? ")" {Call(name, orEmpty args)};
-      branch: p:!(Pattern.parse) "->" s:parse {p, Seq(s, Leave)};
+      branch: p:!(Pattern.parse) "->" s:parse {p, s};
       seq: first:stmt ";" rest:parse {Seq(first, rest)}
     )
   end
