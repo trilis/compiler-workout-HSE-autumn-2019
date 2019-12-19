@@ -50,7 +50,7 @@ module Value =
       in
       inner v;
       Bytes.of_string @@ Buffer.contents buf
-                      
+
   end
        
 (* States *)
@@ -114,29 +114,6 @@ module State =
     let drop (L (_, _, e)) = e
                                
   end
-
-(* Builtins *)
-module Builtin =
-  struct
-      
-    let eval (st, i, o, _) args = function
-      | "read"     -> (match i with z::i' -> (st, i', o, Some (Value.of_int z)) | _ -> failwith "Unexpected end of input")
-      | "write"    -> (st, i, o @ [Value.to_int @@ List.hd args], None)
-      | ".elem"    -> let [b; j] = args in
-                      (st, i, o, let i = Value.to_int j in
-                                 Some (match b with
-                                       | Value.String   s  -> Value.of_int @@ Char.code (Bytes.get s i)
-                                       | Value.Array    a  -> a.(i)
-                                       | Value.Sexp (_, a) -> List.nth a i
-                                 )
-                      )         
-      | ".length"     -> (st, i, o, Some (Value.of_int (match List.hd args with Value.Sexp (_, a) -> List.length a | Value.Array a -> Array.length a | Value.String s -> Bytes.length s)))
-      | ".array"      -> (st, i, o, Some (Value.of_array @@ Array.of_list args))
-      | "isArray"  -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.Array  _ -> 1 | _ -> 0))
-      | "isString" -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.String _ -> 1 | _ -> 0))                     
-      | ".stringval"  -> failwith "Not implemented yet"
-       
-  end
     
 (* Simple expressions: syntax and semantics *)
 module Expr =
@@ -155,6 +132,7 @@ module Expr =
     (* element extraction *) | Elem      of t * t
     (* length             *) | Length    of t
     (* string conversion  *) | StringVal of t
+                             | Map of string * t
     (* function call      *) | Call      of string * t list with show
 
     (* Available binary operators:
@@ -216,6 +194,10 @@ module Expr =
       | Elem (arr, i) -> let (st', i', o', res) = eval_list env conf [arr; i] in env#definition env ".elem" res (st', i', o', None)
       | Length arr -> let (st', i', o', Some arr') =  eval env conf arr in env#definition env ".length" [arr'] (st', i', o', None)
       | Call (name, args) -> let (st', i', o', ev_args) = eval_list env conf args in env#definition env name ev_args (st', i', o', None)
+      | Map (fname, e) -> let (st, i, o, Some r) = eval env conf e in let Value.Sexp(tag, sargs) = r in 
+          let ((st, i, o, _), nargs) = List.fold_left (fun ((st, i, o, _), res) x -> let (st, i, o, Some r) = 
+            env#definition env fname [x] (st, i, o, None) in ((st, i, o, None), res @ [r]))
+           ((st, i, o, None), []) sargs in (st, i, o, Some (Value.Sexp(tag, nargs)))
     and eval_list env conf xs =
       let vs, (st, i, o, _) =
         List.fold_left
@@ -265,10 +247,35 @@ module Expr =
       | "`" c:IDENT "(" args:!(Util.list)[parse] ")" {Sexp (c, args)}
       | "`" c:IDENT {Sexp (c, [])}
       | x:IDENT   {Var x}
+      | %"map" name:IDENT e:!(parse) {Map (name, e)}
       | -"(" parse -")"
     )
   end
-                    
+     
+
+(* Builtins *)
+module Builtin =
+  struct
+      
+    let eval ((st, i, o, _) as conf) args = function
+      | "read"     -> (match i with z::i' -> (st, i', o, Some (Value.of_int z)) | _ -> failwith "Unexpected end of input")
+      | "write"    -> (st, i, o @ [Value.to_int @@ List.hd args], None)
+      | ".elem"    -> let [b; j] = args in
+                      (st, i, o, let i = Value.to_int j in
+                                 Some (match b with
+                                       | Value.String   s  -> Value.of_int @@ Char.code (Bytes.get s i)
+                                       | Value.Array    a  -> a.(i)
+                                       | Value.Sexp (_, a) -> List.nth a i
+                                 )
+                      )         
+      | ".length"     -> (st, i, o, Some (Value.of_int (match List.hd args with Value.Sexp (_, a) -> List.length a | Value.Array a -> Array.length a | Value.String s -> Bytes.length s)))
+      | ".array"      -> (st, i, o, Some (Value.of_array @@ Array.of_list args))
+      | "isArray"  -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.Array  _ -> 1 | _ -> 0))
+      | "isString" -> let [a] = args in (st, i, o, Some (Value.of_int @@ match a with Value.String _ -> 1 | _ -> 0))                     
+      | ".stringval"  -> failwith "Not implemented yet"
+       
+  end
+
 (* Simple statements: syntax and sematics *)
 module Stmt =
   struct
@@ -372,6 +379,7 @@ module Stmt =
       | Return x -> (match x with | None -> (st, i, o, None) | Some e -> Expr.eval env conf e)
       | Leave -> eval env (State.drop st, i, o, None) Skip k
 
+
     let orSkip x = match x with
       | Some x -> x
       | None -> Skip
@@ -428,6 +436,7 @@ type t = Definition.t list * Stmt.t
 
    Takes a program and its input stream, and returns the output stream
 *)
+
 let eval (defs, body) i =
   let module M = Map.Make (String) in
   let m          = List.fold_left (fun m ((name, _) as def) -> M.add name def m) M.empty defs in  

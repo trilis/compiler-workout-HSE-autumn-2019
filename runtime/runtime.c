@@ -18,9 +18,9 @@
 # define TO_DATA(x) ((data*)((char*)(x)-sizeof(int)))
 # define TO_SEXP(x) ((sexp*)((char*)(x)-2*sizeof(int)))
 
-# define UNBOXED(x) (1)
-# define UNBOX(x)   (x)
-# define BOX(x)     (x)
+# define UNBOXED(x) 1
+# define UNBOX(x)   x
+# define BOX(x)     x
 
 typedef struct {
   int tag; 

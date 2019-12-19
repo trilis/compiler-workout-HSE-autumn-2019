@@ -1,0 +1,18 @@
+fun f1(x) {
+	return x * x
+}
+
+fun f2(x) {
+	return 2 * x
+}
+
+fun printA (l) {
+  case l of
+    `a(x, y, z) -> write(x); write(y); write(z)
+  esac
+}
+
+x := `a(5, 2, 3);
+
+printA(map f1 x);
+printA(map f2 x)
