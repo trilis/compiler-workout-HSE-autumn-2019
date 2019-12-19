@@ -168,7 +168,7 @@ let rec compile (defs, stmt) =
   | Expr.Call (name, args) -> List.concat (List.map expr args) @ [CALL ("L" ^ name, List.length args, true)]
   | Expr.Map (f, e) -> let exit_label = name_gen#get in let continue_label = name_gen#get in 
                         expr e @ [CONST 0; ST "$i"; LABEL continue_label; DUP; CALL (".length", 1, true); 
-                        LD "$i"; BINOP("-"); CJMP("z", exit_label); LD "$i"; CALL (".elem", 2, true); SWAP; 
+                        LD "$i"; BINOP("-"); CJMP("z", exit_label); DUP; LD "$i"; CALL (".elem", 2, true); CALL ("L" ^ f, 1, true); SWAP;
                         LD "$i"; CONST 1; BINOP("+"); ST "$i"; JMP continue_label; LABEL exit_label; GETTAG; LD "$i"; SEXP_FROM_STACK]
   in
   let rec compile_stmt stmt end_label = match stmt with
