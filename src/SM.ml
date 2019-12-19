@@ -7,7 +7,7 @@ open Language
 (* put a constant on the stack     *) | CONST   of int
 (* put a string on the stack       *) | STRING  of string
 (* create an S-expression          *) | SEXP    of string * int
-                                      | SEXP_FROM_STACK
+                                      | REPLACE_SEXP_ARGS
 (* load a variable to the stack    *) | LD      of string
 (* store a variable from the stack *) | ST      of string
 (* store in an array               *) | STA     of string * int
@@ -22,7 +22,6 @@ open Language
 (* duplicates the top element      *) | DUP
 (* swaps two top elements          *) | SWAP
 (* checks the tag of S-expression  *) | TAG     of string
-                                      | GETTAG
 (* enters a scope                  *) | ENTER   of string list
 (* leaves a scope                  *) | LEAVE
 with show
@@ -58,8 +57,9 @@ let evalCmd (prgstack, stack, (state, i, o)) cmd = match cmd with
   | CONST c -> (prgstack, (Value.of_int c) :: stack, (state, i, o))
   | STRING s -> (prgstack, (Value.of_string (Bytes.of_string s)) :: stack, (state, i, o))
   | SEXP (s, n) -> let (args, stack') = split n stack in (prgstack, Value.sexp s (List.rev args) :: stack', (state, i, o))
-  | SEXP_FROM_STACK -> let n :: s :: stack = stack in 
-                   let (args, stack') = split (Value.to_int n) stack in (prgstack, Value.sexp (Bytes.to_string (Value.to_string s)) (List.rev args) :: stack', (state, i, o))
+  | REPLACE_SEXP_ARGS -> let sexp :: stack = stack in let Value.Sexp (s, args) = sexp in 
+                   let (args, stack') = split (List.length args) stack in 
+                   (prgstack, Value.sexp s (List.rev args) :: stack', (state, i, o))
   | LD v -> (prgstack, ((State.eval state v) :: stack), (state, i, o))
   | ST v -> let (x :: rest) = stack in (prgstack, rest, ((State.update v x state), i, o))
   | STA (arr, len) -> let v::ids, newstack = split (len + 1) stack in
@@ -70,7 +70,6 @@ let evalCmd (prgstack, stack, (state, i, o)) cmd = match cmd with
   | SWAP -> let (x :: y :: rest) = stack in (prgstack, (y :: x :: rest), (state, i, o))
   | TAG s -> let (x :: rest) = stack in let res = (match x with | Value.Sexp(s', _) when s' = s -> 1 | _ -> 0) in
               (prgstack, (Value.of_int res) :: rest, (state, i, o))
-  | GETTAG -> let (x :: rest) = stack in let Value.Sexp(s, _) = x in (prgstack, (Value.of_string (Bytes.of_string s)) :: rest, (state, i, o))
   | ENTER xs -> let state = State.push state State.undefined xs in let (vs, stack) = split (List.length xs) stack in
                   let state = List.fold_left (fun res (s, v) -> State.update s v res) state (List.combine (List.rev xs) vs) in
                   (prgstack, stack, (state, i, o))
@@ -169,7 +168,7 @@ let rec compile (defs, stmt) =
   | Expr.Map (f, e) -> let exit_label = name_gen#get in let continue_label = name_gen#get in 
                         expr e @ [CONST 0; ST "$i"; LABEL continue_label; DUP; CALL (".length", 1, true); 
                         LD "$i"; BINOP("-"); CJMP("z", exit_label); DUP; LD "$i"; CALL (".elem", 2, true); CALL ("L" ^ f, 1, true); SWAP;
-                        LD "$i"; CONST 1; BINOP("+"); ST "$i"; JMP continue_label; LABEL exit_label; GETTAG; LD "$i"; SEXP_FROM_STACK]
+                        LD "$i"; CONST 1; BINOP("+"); ST "$i"; JMP continue_label; LABEL exit_label; REPLACE_SEXP_ARGS]
   in
   let rec compile_stmt stmt end_label = match stmt with
   | Stmt.Seq (s1, s2)  -> (compile_stmt s1 "") @ (compile_stmt s2 end_label)
