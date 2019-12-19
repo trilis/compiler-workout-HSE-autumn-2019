@@ -239,7 +239,8 @@ module Expr =
         len:("." %"length")? {match len with None -> withElems | Some _ -> Length withElems};
 
       primary:
-        f:IDENT "(" args:!(Util.list0)[parse] ")" {Call (f, args)} 
+        "map" name:IDENT e:!(parse) {Map (name, e)}
+      | f:IDENT "(" args:!(Util.list0)[parse] ")" {Call (f, args)} 
       | n:DECIMAL {Const n}
       | c:CHAR {Const (Char.code c)}
       | s:STRING {String (String.sub s 1 (String.length s - 2))}
@@ -247,7 +248,6 @@ module Expr =
       | "`" c:IDENT "(" args:!(Util.list)[parse] ")" {Sexp (c, args)}
       | "`" c:IDENT {Sexp (c, [])}
       | x:IDENT   {Var x}
-      | %"map" name:IDENT e:!(parse) {Map (name, e)}
       | -"(" parse -")"
     )
   end
